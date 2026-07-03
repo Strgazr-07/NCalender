@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Binder tabs -->
+    <path
+        android:strokeColor="#F2F2F0"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M44,24 L44,37" />
+    <path
+        android:strokeColor="#F2F2F0"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M64,24 L64,37" />
+
+    <!-- Calendar body outline -->
+    <path
+        android:strokeColor="#F2F2F0"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:pathData="M38,31 L70,31 A8,8 0 0 1 78,39 L78,69 A8,8 0 0 1 70,77 L38,77 A8,8 0 0 1 30,69 L30,39 A8,8 0 0 1 38,31 Z" />
+
+    <!-- Header divider -->
+    <path
+        android:strokeColor="#F2F2F0"
+        android:strokeWidth="4.5"
+        android:pathData="M30,43 L78,43" />
+
+    <!-- Dot-matrix days; the red dot is 'today' -->
+    <path android:fillColor="#9A9A98" android:pathData="M36.4,55 a3.6,3.6 0 1,0 7.2,0 a3.6,3.6 0 1,0 -7.2,0 Z" />
+    <path android:fillColor="#D71921" android:pathData="M50.4,55 a3.6,3.6 0 1,0 7.2,0 a3.6,3.6 0 1,0 -7.2,0 Z" />
+    <path android:fillColor="#9A9A98" android:pathData="M64.4,55 a3.6,3.6 0 1,0 7.2,0 a3.6,3.6 0 1,0 -7.2,0 Z" />
+    <path android:fillColor="#9A9A98" android:pathData="M36.4,67 a3.6,3.6 0 1,0 7.2,0 a3.6,3.6 0 1,0 -7.2,0 Z" />
+    <path android:fillColor="#9A9A98" android:pathData="M50.4,67 a3.6,3.6 0 1,0 7.2,0 a3.6,3.6 0 1,0 -7.2,0 Z" />
+    <path android:fillColor="#9A9A98" android:pathData="M64.4,67 a3.6,3.6 0 1,0 7.2,0 a3.6,3.6 0 1,0 -7.2,0 Z" />
+</vector>

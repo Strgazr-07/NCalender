@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_preview_bg"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="JULY"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:letterSpacing="0.15"
+        android:fontFamily="@font/ntype82_regular" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="S&#160;&#160;&#160;M&#160;&#160;&#160;T&#160;&#160;&#160;W&#160;&#160;&#160;T&#160;&#160;&#160;F&#160;&#160;&#160;S"
+        android:textColor="#565654"
+        android:textSize="10sp"
+        android:gravity="center_horizontal"
+        android:fontFamily="@font/ntype82_mono" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="05&#160;06&#160;07&#160;08&#160;09&#160;10&#160;11"
+        android:textColor="#8A8A88"
+        android:textSize="11sp"
+        android:gravity="center_horizontal"
+        android:fontFamily="@font/ntype82_mono" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_gravity="center_horizontal"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="12&#160;13&#160;14&#160;"
+            android:textColor="#8A8A88"
+            android:textSize="11sp"
+            android:fontFamily="@font/ntype82_mono" />
+        <TextView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:gravity="center"
+            android:background="@drawable/widget_preview_today"
+            android:text="15"
+            android:textColor="#000000"
+            android:textSize="11sp"
+            android:fontFamily="@font/ntype82_mono" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="&#160;16&#160;17&#160;18"
+            android:textColor="#8A8A88"
+            android:textSize="11sp"
+            android:fontFamily="@font/ntype82_mono" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="19&#160;20&#160;21&#160;22&#160;23&#160;24&#160;25"
+        android:textColor="#8A8A88"
+        android:textSize="11sp"
+        android:gravity="center_horizontal"
+        android:fontFamily="@font/ntype82_mono" />
+</LinearLayout>

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_preview_bg"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="@drawable/widget_preview_dot"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="TODAY"
+            android:textColor="#565654"
+            android:textSize="10sp"
+            android:letterSpacing="0.2"
+            android:fontFamily="@font/ntype82_mono" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:text="09:00"
+            android:textColor="#8A8A88"
+            android:textSize="11sp"
+            android:fontFamily="@font/ndot55_regular" />
+        <ImageView
+            android:layout_width="3dp"
+            android:layout_height="22dp"
+            android:background="@drawable/widget_preview_bar_red"
+            android:importantForAccessibility="no" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="Design review"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:fontFamily="@font/ntype82_regular" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:text="11:00"
+            android:textColor="#8A8A88"
+            android:textSize="11sp"
+            android:fontFamily="@font/ndot55_regular" />
+        <ImageView
+            android:layout_width="3dp"
+            android:layout_height="22dp"
+            android:background="@drawable/widget_preview_bar_dim"
+            android:importantForAccessibility="no" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="Dentist"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:fontFamily="@font/ntype82_regular" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:text="15:00"
+            android:textColor="#8A8A88"
+            android:textSize="11sp"
+            android:fontFamily="@font/ndot55_regular" />
+        <ImageView
+            android:layout_width="3dp"
+            android:layout_height="22dp"
+            android:background="@drawable/widget_preview_bar_dim"
+            android:importantForAccessibility="no" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="Call mom"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:fontFamily="@font/ntype82_regular" />
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">NCalendar</string>
+    <string name="widget_desc_next_event">Your next event with a live countdown.</string>
+    <string name="widget_desc_dot_date">Today\'s date in dot-matrix type.</string>
+    <string name="widget_desc_agenda">Today\'s events at a glance.</string>
+    <string name="widget_desc_mini_month">A minimal month grid with event dots.</string>
+</resources>
