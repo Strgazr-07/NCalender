@@ -1,6 +1,7 @@
-# Gradle / build
+# Gradle / build output
 .gradle/
 build/
+.kotlin/
 local.properties
 
 # Signing — never commit secrets or the keystore
@@ -11,8 +12,32 @@ keystore.properties
 # IDE
 .idea/
 *.iml
-.DS_Store
 
-# Captures / logs
-/captures/
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / captures
 *.log
+/captures/
+
+# Claude Code local (machine-specific) settings — not part of the app
+.claude/settings.local.json
+
+# --- Nothing Technology proprietary fonts ---
+# Ndot (dot-matrix) and NType82 are Nothing's own typefaces, bundled here only
+# for a personal/local build. They must NOT be redistributed publicly, so the
+# actual font files are excluded from version control. See README.md for how
+# to source them yourself before building. (Space Grotesk / Space Mono are
+# open (SIL OFL) and are NOT excluded.)
+android/app/src/main/res/font/ndot55_regular.otf
+android/app/src/main/res/font/ndot55caps_regular.otf
+android/app/src/main/res/font/ndot57_regular.otf
+android/app/src/main/res/font/ndot57caps_regular.otf
+android/app/src/main/res/font/ntype82_regular.otf
+android/app/src/main/res/font/ntype82_headline.otf
+android/app/src/main/res/font/ntype82_mono.otf
+
+# Unused font, unknown license — not referenced by any code (safe to keep
+# locally; just not something to publish without checking its terms).
+android/app/src/main/res/font/lettera_mono_regular.otf
