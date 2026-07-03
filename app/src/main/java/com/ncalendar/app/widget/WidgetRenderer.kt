@@ -127,40 +127,57 @@ object WidgetRenderer {
     fun renderMiniMonth(context: Context, w: Int, h: Int, eventDays: Set<LocalDate>): Bitmap {
         val (bmp, c) = bitmap(w, h)
         val today = LocalDate.now()
-        val pad = w * 0.06f
-        c.drawText(CalendarFormats.MON_FULL[today.monthValue - 1], pad, h * 0.13f, paint(body(context), h * 0.11f, WHITE))
+        val pad = w * 0.09f
+
+        // Header: month name left, year right — same rhythm as the app's header bar.
+        c.drawText(
+            CalendarFormats.MON_FULL[today.monthValue - 1],
+            pad, h * 0.125f,
+            paint(body(context), h * 0.08f, WHITE, 0.08f),
+        )
+        c.drawText(
+            today.year.toString(),
+            w - pad, h * 0.125f,
+            paint(mono(context), h * 0.06f, FAINT, 0.12f, Paint.Align.RIGHT),
+        )
+
+        val weekStart = Prefs(context).weekStart // honors the app's first-day setting
+        val cellW = (w - pad * 2) / 7f
+
+        // Day-of-week letters
+        val dowPaint = paint(mono(context), h * 0.048f, FAINT, 0.1f, Paint.Align.CENTER)
+        for (i in 0 until 7) {
+            c.drawText(
+                CalendarFormats.DOW_SHORT[(weekStart + i) % 7],
+                pad + cellW * i + cellW / 2f, h * 0.235f, dowPaint,
+            )
+        }
+
+        // Only this month's days — no dimmed spill-over; blank cells keep it clean.
         val first = today.withDayOfMonth(1)
-        val offset = CalendarFormats.dowIndex(first) // week starts Sunday
-        val gridStart = first.minusDays(offset.toLong())
-        val cols = 7
-        val rows = 6
-        val cellW = (w - pad * 2) / cols
-        val gridTop = h * 0.22f
-        val cellH = (h - gridTop - pad) / rows
-        val numPaint = paint(body(context), (cellH * 0.42f).coerceAtMost(cellW * 0.5f), WHITE, align = Paint.Align.CENTER)
-        for (i in 0 until cols * rows) {
-            val date = gridStart.plusDays(i.toLong())
-            val col = i % cols
-            val row = i / cols
-            val cx = pad + cellW * col + cellW / 2f
-            val cy = gridTop + cellH * row + cellH * 0.55f
-            val inMonth = date.monthValue == today.monthValue
+        val offset = (CalendarFormats.dowIndex(first) - weekStart + 7) % 7
+        val daysInMonth = today.lengthOfMonth()
+        val rows = (offset + daysInMonth + 6) / 7
+        val gridTop = h * 0.285f
+        val cellH = (h - gridTop - h * 0.045f) / rows
+        val numPaint = paint(body(context), (cellH * 0.4f).coerceAtMost(cellW * 0.42f), WHITE, align = Paint.Align.CENTER)
+
+        for (day in 1..daysInMonth) {
+            val idx = offset + day - 1
+            val cx = pad + cellW * (idx % 7) + cellW / 2f
+            val cy = gridTop + cellH * (idx / 7) + cellH / 2f
+            val baseline = cy - (numPaint.ascent() + numPaint.descent()) / 2f
+            val date = first.plusDays((day - 1).toLong())
             val isToday = date == today
             if (isToday) {
-                val ring = Paint().apply {
-                    color = accent(context); isAntiAlias = true; style = Paint.Style.FILL
-                }
-                c.drawCircle(cx, cy - cellH * 0.16f, cellH * 0.36f, ring)
+                val fill = Paint().apply { color = accent(context); isAntiAlias = true }
+                c.drawCircle(cx, cy, minOf(cellW, cellH) * 0.44f, fill)
             }
-            numPaint.color = when {
-                isToday -> Color.BLACK
-                inMonth -> WHITE
-                else -> 0xFF3A3A38.toInt()
-            }
-            c.drawText(date.dayOfMonth.toString(), cx, cy, numPaint)
-            if (inMonth && !isToday && date in eventDays) {
+            numPaint.color = if (isToday) Color.BLACK else WHITE
+            c.drawText(day.toString(), cx, baseline, numPaint)
+            if (!isToday && date in eventDays) {
                 val dot = Paint().apply { color = DIM; isAntiAlias = true }
-                c.drawCircle(cx, cy + cellH * 0.22f, cellH * 0.06f, dot)
+                c.drawCircle(cx, cy + cellH * 0.34f, minOf(cellW, cellH) * 0.06f, dot)
             }
         }
         return bmp
