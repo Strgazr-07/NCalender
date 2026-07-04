@@ -1,5 +1,7 @@
 # NCalendar
 
+![NCalendar — minimal calendar, maximum clarity](docs/poster/mockup.png)
+
 A minimal, Nothing OS-styled calendar app for Android, built with Kotlin and
 Jetpack Compose. Reads and writes your device's real calendars (Google,
 Outlook, local), or runs fully offline if you'd rather it didn't — with its
