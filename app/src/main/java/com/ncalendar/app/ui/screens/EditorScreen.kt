@@ -89,7 +89,7 @@ fun EditorScreen(vm: CalendarViewModel) {
                 value = form.title,
                 onValueChange = { v -> vm.patchForm { it.copy(title = v) } },
                 placeholder = { Text("Event title", color = NColors.textGhost, fontSize = 22.sp) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = NColors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, fontFamily = NFonts.SpaceGrotesk),
+                textStyle = androidx.compose.ui.text.TextStyle(color = NColors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, fontFamily = NFonts.Body),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
@@ -171,7 +171,7 @@ fun EditorScreen(vm: CalendarViewModel) {
                 value = form.location,
                 onValueChange = { v -> vm.patchForm { it.copy(location = v) } },
                 placeholder = { Text("Add location", color = NColors.textGhost, fontSize = 15.sp) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = NColors.textPrimary, fontSize = 15.sp, fontFamily = NFonts.SpaceGrotesk),
+                textStyle = androidx.compose.ui.text.TextStyle(color = NColors.textPrimary, fontSize = 15.sp, fontFamily = NFonts.Body),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
@@ -185,7 +185,7 @@ fun EditorScreen(vm: CalendarViewModel) {
                 value = form.notes,
                 onValueChange = { v -> vm.patchForm { it.copy(notes = v) } },
                 placeholder = { Text("Add notes", color = NColors.textGhost, fontSize = 14.sp) },
-                textStyle = androidx.compose.ui.text.TextStyle(color = NColors.textSecondary, fontSize = 14.sp, fontFamily = NFonts.SpaceGrotesk),
+                textStyle = androidx.compose.ui.text.TextStyle(color = NColors.textSecondary, fontSize = 14.sp, fontFamily = NFonts.Body),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,

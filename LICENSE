@@ -24,5 +24,5 @@ SOFTWARE.
 
 This license covers the NCalendar source code only. It does not cover, and
 does not grant any rights to, the Ndot / NType typefaces referenced in
-android/app/src/main/res/font/ — those are Nothing Technology Limited's
+app/src/main/res/font/ — those are Nothing Technology Limited's
 proprietary fonts and are excluded from this repository. See README.md.

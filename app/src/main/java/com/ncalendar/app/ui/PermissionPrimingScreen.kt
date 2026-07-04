@@ -40,6 +40,7 @@ import com.ncalendar.app.ui.theme.NFonts
 fun PermissionPrimingScreen(
     accent: Color,
     onGrant: () -> Unit,
+    onUseLocal: () -> Unit,
 ) {
     Column(
         Modifier
@@ -116,6 +117,20 @@ fun PermissionPrimingScreen(
                 letterSpacing = 2.sp,
                 fontWeight = FontWeight.Bold,
             )
+        }
+        Spacer(Modifier.height(12.dp))
+        // Privacy opt-out — no accounts, everything stays in the on-device store.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .border(1.dp, NColors.borderStrong, RoundedCornerShape(16.dp))
+                .clickable(onClick = onUseLocal)
+                .padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("USE OFFLINE", color = NColors.textSecondary, fontFamily = NFonts.Mono, fontSize = 12.sp, letterSpacing = 2.sp)
+            Spacer(Modifier.height(3.dp))
+            Text("No accounts — events stay on this phone", color = NColors.textFaint, fontSize = 12.5.sp)
         }
         Spacer(Modifier.height(24.dp))
     }

@@ -30,14 +30,14 @@ Thumbs.db
 # actual font files are excluded from version control. See README.md for how
 # to source them yourself before building. (Space Grotesk / Space Mono are
 # open (SIL OFL) and are NOT excluded.)
-android/app/src/main/res/font/ndot55_regular.otf
-android/app/src/main/res/font/ndot55caps_regular.otf
-android/app/src/main/res/font/ndot57_regular.otf
-android/app/src/main/res/font/ndot57caps_regular.otf
-android/app/src/main/res/font/ntype82_regular.otf
-android/app/src/main/res/font/ntype82_headline.otf
-android/app/src/main/res/font/ntype82_mono.otf
+app/src/main/res/font/ndot55_regular.otf
+app/src/main/res/font/ndot55caps_regular.otf
+app/src/main/res/font/ndot57_regular.otf
+app/src/main/res/font/ndot57caps_regular.otf
+app/src/main/res/font/ntype82_regular.otf
+app/src/main/res/font/ntype82_headline.otf
+app/src/main/res/font/ntype82_mono.otf
 
 # Unused font, unknown license — not referenced by any code (safe to keep
 # locally; just not something to publish without checking its terms).
-android/app/src/main/res/font/lettera_mono_regular.otf
+app/src/main/res/font/lettera_mono_regular.otf

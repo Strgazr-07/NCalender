@@ -43,7 +43,7 @@ fun CalendarsScreen(vm: CalendarViewModel) {
     val events by vm.events.collectAsState()
     val calendars by vm.calendars.collectAsState()
     val accounts = calendars.groupBy { it.accountName.ifBlank { "On this device" } }.toList()
-    val subtitle = if (vm.usingSystemCalendar) "Synced via Android accounts" else "Demo · grant access to see real calendars"
+    val subtitle = if (vm.usingSystemCalendar) "Synced via Android accounts" else "Local only · private to this phone"
 
     Column(Modifier.fillMaxSize().background(NColors.bg).statusBarsPadding()) {
         Column(Modifier.padding(top = 12.dp, start = ScreenPad, end = ScreenPad, bottom = 8.dp)) {
@@ -122,16 +122,54 @@ fun CalendarsScreen(vm: CalendarViewModel) {
                 }
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(26.dp))
+
+            // Connect / sign out — the privacy switch between account calendars
+            // and the on-device local store.
+            if (vm.usingSystemCalendar) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(NColors.surface, RoundedCornerShape(18.dp))
+                        .border(1.dp, NColors.border, RoundedCornerShape(18.dp))
+                        .clickable { vm.updateLocalOnly(true) }
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                ) {
+                    Text("Sign out — use offline", color = vm.accent, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Stop reading account calendars. New events are stored only on this phone; your Google events stay untouched in your account.",
+                        color = NColors.textFaint, fontSize = 13.sp, lineHeight = 18.sp,
+                    )
+                }
+            } else {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(NColors.surface, RoundedCornerShape(18.dp))
+                        .border(1.dp, NColors.border, RoundedCornerShape(18.dp))
+                        .clickable { vm.updateLocalOnly(false) }
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                ) {
+                    Text("Connect account calendars", color = NColors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Read and edit your Google, Outlook and device calendars. You can sign out again anytime.",
+                        color = NColors.textFaint, fontSize = 13.sp, lineHeight = 18.sp,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 24.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Dot(if (vm.usingSystemCalendar) Color(0xFF8FAE8B) else NColors.textFainter, size = 6.dp)
+                Dot(if (vm.usingSystemCalendar) Color(0xFF8FAE8B) else vm.accent, size = 6.dp)
                 Spacer(Modifier.width(9.dp))
                 MonoLabel(
-                    if (vm.usingSystemCalendar) "Reading your device calendars" else "Showing demo data",
+                    if (vm.usingSystemCalendar) "Reading your device calendars" else "Nothing leaves this phone",
                     color = NColors.textFaint,
                 )
             }

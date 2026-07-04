@@ -81,8 +81,10 @@ class ReminderReceiver : BroadcastReceiver() {
             putExtras(intent)
             setAction(ACTION_REMIND)
         }
+        // Own request-code space (+2M): reusing the original alarm's code would let
+        // the next reminder sync cancel the snoozed alarm before it fires.
         val pending = PendingIntent.getBroadcast(
-            context, notificationId, fireIntent,
+            context, notificationId + 2_000_000, fireIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val triggerAt = System.currentTimeMillis() + 10 * 60 * 1000L

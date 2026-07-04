@@ -108,8 +108,11 @@ fun NTimePickerSheet(
     onDismiss: () -> Unit,
     onConfirm: (LocalTime) -> Unit,
 ) {
-    var hour by remember { mutableStateOf(initial.hour) }
+    // 12-hour wheels with an explicit AM/PM column — a bare 24h wheel made it
+    // too easy to schedule "10:50" in the morning while meaning the evening.
+    var hour12 by remember { mutableStateOf(((initial.hour + 11) % 12) + 1) }
     var minute by remember { mutableStateOf(initial.minute) }
+    var pmIndex by remember { mutableStateOf(if (initial.hour >= 12) 1 else 0) }
 
     PickerSheet(title, onDismiss) {
         Box(Modifier.fillMaxWidth().height(WHEEL_ITEM_H * WHEEL_VISIBLE)) {
@@ -128,23 +131,32 @@ fun NTimePickerSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 WheelColumn(
-                    values = (0..23).toList(),
-                    initial = initial.hour,
+                    labels = (1..12).map { CalendarFormats.pad(it) },
+                    initialIndex = hour12 - 1,
                     ndot = ndot,
-                    onSelected = { hour = it },
+                    onSelected = { hour12 = it + 1 },
                 )
                 Text(
                     ":",
                     color = NColors.textDim,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp),
                 )
                 WheelColumn(
-                    values = (0..59).toList(),
-                    initial = initial.minute,
+                    labels = (0..59).map { CalendarFormats.pad(it) },
+                    initialIndex = initial.minute,
                     ndot = ndot,
                     onSelected = { minute = it },
+                )
+                Spacer(Modifier.width(14.dp))
+                WheelColumn(
+                    labels = listOf("AM", "PM"),
+                    initialIndex = pmIndex,
+                    ndot = false,
+                    onSelected = { pmIndex = it },
+                    width = 58.dp,
+                    textSize = 18.sp,
                 )
             }
         }
@@ -153,21 +165,25 @@ fun NTimePickerSheet(
             accent = accent,
             confirmLabel = "Set time",
             onDismiss = onDismiss,
-            onConfirm = { onConfirm(LocalTime.of(hour, minute)) },
+            onConfirm = {
+                val hour24 = (hour12 % 12) + if (pmIndex == 1) 12 else 0
+                onConfirm(LocalTime.of(hour24, minute))
+            },
         )
     }
 }
 
-/** A snapping number wheel: 5 visible rows, the centered one is selected. */
+/** A snapping wheel: 5 visible rows, the centered one is selected (reported by index). */
 @Composable
 private fun WheelColumn(
-    values: List<Int>,
-    initial: Int,
+    labels: List<String>,
+    initialIndex: Int,
     ndot: Boolean,
     onSelected: (Int) -> Unit,
+    width: androidx.compose.ui.unit.Dp = 72.dp,
+    textSize: androidx.compose.ui.unit.TextUnit = 26.sp,
 ) {
-    val startIndex = values.indexOf(initial).coerceAtLeast(0)
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = startIndex)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex.coerceIn(0, labels.lastIndex))
     val itemPx = with(LocalDensity.current) { WHEEL_ITEM_H.toPx() }
     val haptic = LocalHapticFeedback.current
 
@@ -175,11 +191,11 @@ private fun WheelColumn(
         derivedStateOf {
             val idx = listState.firstVisibleItemIndex +
                 if (listState.firstVisibleItemScrollOffset > itemPx / 2) 1 else 0
-            idx.coerceIn(0, values.lastIndex)
+            idx.coerceIn(0, labels.lastIndex)
         }
     }
     LaunchedEffect(selectedIndex) {
-        onSelected(values[selectedIndex])
+        onSelected(selectedIndex)
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
@@ -187,16 +203,16 @@ private fun WheelColumn(
         state = listState,
         flingBehavior = rememberSnapFlingBehavior(listState),
         contentPadding = PaddingValues(vertical = WHEEL_ITEM_H * (WHEEL_VISIBLE / 2)),
-        modifier = Modifier.width(72.dp).height(WHEEL_ITEM_H * WHEEL_VISIBLE),
+        modifier = Modifier.width(width).height(WHEEL_ITEM_H * WHEEL_VISIBLE),
     ) {
-        items(values.size) { i ->
+        items(labels.size) { i ->
             val sel = i == selectedIndex
             Box(Modifier.fillMaxWidth().height(WHEEL_ITEM_H), contentAlignment = Alignment.Center) {
                 Text(
-                    CalendarFormats.pad(values[i]),
+                    labels[i],
                     color = if (sel) NColors.textPrimary else NColors.textFainter,
                     fontFamily = NFonts.numeral(ndot),
-                    fontSize = if (sel) 26.sp else 20.sp,
+                    fontSize = if (sel) textSize else textSize * 0.78f,
                     fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }

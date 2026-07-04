@@ -34,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ncalendar.app.data.CalendarFormats
-import com.ncalendar.app.data.Calendars
 import com.ncalendar.app.data.EventItem
 import com.ncalendar.app.ui.components.MonoLabel
 import com.ncalendar.app.ui.theme.NColors
@@ -137,7 +136,7 @@ private fun DayBlock(vm: CalendarViewModel, events: List<EventItem>, e: EventIte
     if (eMin - sMin < 30) eMin = sMin + 30
     val top = HOUR_H * ((sMin - DAY_START * 60) / 60f)
     val h = HOUR_H * ((eMin - sMin) / 60f)
-    val c = Calendars.get(e.calendarId).color
+    val c = e.color
     val dragging = dragDm != 0
     val dragOffsetDp = with(LocalDensity.current) { (dragDm / 60f * hourHPx).toDp() }
 

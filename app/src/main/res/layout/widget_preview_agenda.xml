@@ -23,7 +23,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:text="TODAY"
-            android:textColor="#565654"
+            android:textColor="#8A8A88"
             android:textSize="10sp"
             android:letterSpacing="0.2"
             android:fontFamily="@font/ntype82_mono" />
@@ -39,7 +39,7 @@
             android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:text="09:00"
-            android:textColor="#8A8A88"
+            android:textColor="#C8C8C6"
             android:textSize="11sp"
             android:fontFamily="@font/ndot55_regular" />
         <ImageView
@@ -68,7 +68,7 @@
             android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:text="11:00"
-            android:textColor="#8A8A88"
+            android:textColor="#C8C8C6"
             android:textSize="11sp"
             android:fontFamily="@font/ndot55_regular" />
         <ImageView
@@ -97,7 +97,7 @@
             android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:text="15:00"
-            android:textColor="#8A8A88"
+            android:textColor="#C8C8C6"
             android:textSize="11sp"
             android:fontFamily="@font/ndot55_regular" />
         <ImageView

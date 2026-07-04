@@ -59,7 +59,7 @@ fun WeekView(vm: CalendarViewModel, events: List<EventItem>) {
                 ) {
                     Text(
                         CalendarFormats.DOW_SHORT[CalendarFormats.dowIndex(d)],
-                        color = if (d.dayOfWeek.value % 7 == 0 || d.dayOfWeek.value == 6) NColors.textFainter else NColors.textDim,
+                        color = if (d.dayOfWeek.value % 7 == 0 || d.dayOfWeek.value == 6) NColors.textDim else NColors.textMuted,
                         fontFamily = NFonts.Mono,
                         fontSize = 11.sp,
                     )

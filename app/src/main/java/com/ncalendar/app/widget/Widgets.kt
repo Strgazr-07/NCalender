@@ -76,7 +76,10 @@ abstract class BaseCalendarWidget : AppWidgetProvider() {
 
 class NextEventWidget : BaseCalendarWidget() {
     override fun renderBitmap(context: Context, w: Int, h: Int, events: List<EventItem>, now: LocalDateTime): Bitmap {
-        val next = events.filterNot { it.allDay }.filter { it.start.isAfter(now) }.minByOrNull { it.start }
+        // Ongoing event first (shown as "now"), else the next upcoming one.
+        val timed = events.filterNot { it.allDay }
+        val next = timed.filter { !it.start.isAfter(now) && it.end.isAfter(now) }.minByOrNull { it.start }
+            ?: timed.filter { it.start.isAfter(now) }.minByOrNull { it.start }
         return WidgetRenderer.renderNextEvent(context, w, h, next, now)
     }
 }

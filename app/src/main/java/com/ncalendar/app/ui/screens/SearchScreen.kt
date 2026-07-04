@@ -68,7 +68,7 @@ fun SearchScreen(vm: CalendarViewModel) {
                     value = q,
                     onValueChange = { vm.onSearchQuery(it) },
                     placeholder = { Text("Search events", color = NColors.textGhost, fontSize = 15.sp) },
-                    textStyle = TextStyle(color = NColors.textPrimary, fontSize = 15.sp, fontFamily = NFonts.SpaceGrotesk),
+                    textStyle = TextStyle(color = NColors.textPrimary, fontSize = 15.sp, fontFamily = NFonts.Body),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent,

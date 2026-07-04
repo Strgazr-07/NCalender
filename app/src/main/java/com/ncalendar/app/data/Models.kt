@@ -55,12 +55,12 @@ data class CalendarInfo(
 )
 
 object Calendars {
-    val PERSONAL = CalendarInfo("p_personal", "Personal", Color(0xFFE8E8E6), "you@work.com", "Local")
-    val FAMILY = CalendarInfo("p_family", "Family", Color(0xFFC2A878), "you@work.com", "Local")
-    val WORK = CalendarInfo("g_work", "Work", Color(0xFF6F9DB8), "you@gmail.com", "Local")
-    val HOLIDAYS = CalendarInfo("g_hol", "Holidays", Color(0xFF8FAE8B), "you@gmail.com", "Local", isWritable = false)
+    // The offline calendar set: everything stays on this phone, no accounts.
+    val PERSONAL = CalendarInfo("p_personal", "Personal", Color(0xFFE8E8E6), "", "On this device")
+    val FAMILY = CalendarInfo("p_family", "Family", Color(0xFFC2A878), "", "On this device")
+    val WORK = CalendarInfo("g_work", "Work", Color(0xFF6F9DB8), "", "On this device")
 
-    val all = listOf(PERSONAL, FAMILY, WORK, HOLIDAYS)
+    val all = listOf(PERSONAL, FAMILY, WORK)
     private val byId = all.associateBy { it.id }
     fun get(id: String): CalendarInfo = byId[id] ?: PERSONAL
 }

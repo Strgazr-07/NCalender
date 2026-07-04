@@ -52,12 +52,14 @@ fun MonthView(vm: CalendarViewModel, events: List<EventItem>) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = ScreenPad),
     ) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        // Symmetric breathing room around the weekday letters, and brighter text —
+        // the faint tones were hard to read on the pure-black background.
+        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
             dowLabels.forEachIndexed { i, l ->
                 val idx = (vm.weekStart + i) % 7
                 Text(
                     l,
-                    color = if (idx == 0 || idx == 6) NColors.textFainter else NColors.textDim,
+                    color = if (idx == 0 || idx == 6) NColors.textDim else NColors.textMuted,
                     fontFamily = NFonts.Mono,
                     fontSize = 12.sp,
                     letterSpacing = 1.sp,

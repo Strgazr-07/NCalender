@@ -50,8 +50,9 @@ class MainActivity : ComponentActivity() {
                 controller.isAppearanceLightNavigationBars = !dark
             }
             NCalendarTheme(dark = dark, accent = viewModel.accent) {
-                // The app needs the system calendar — keep priming up until granted.
-                val showPriming = permVersion < 0 || !hasCalendarPermission()
+                // Priming stays up until access is granted — unless the user opted
+                // for local-only mode, which needs no permission at all.
+                val showPriming = !viewModel.localOnly && (permVersion < 0 || !hasCalendarPermission())
                 if (showPriming) {
                     PermissionPrimingScreen(
                         accent = viewModel.accent,
@@ -62,6 +63,15 @@ class MainActivity : ComponentActivity() {
                                 shouldShowRequestPermissionRationale(Manifest.permission.READ_CALENDAR)
                             prefs.permissionPrimed = true
                             if (canAsk) requestAllPermissions() else openAppSettings()
+                        },
+                        onUseLocal = {
+                            viewModel.updateLocalOnly(true)
+                            // Notifications are still wanted for local reminders.
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
                         },
                     )
                 } else {

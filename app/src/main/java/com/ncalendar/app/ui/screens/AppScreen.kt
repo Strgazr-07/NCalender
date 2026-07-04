@@ -84,7 +84,7 @@ fun AppScreen(vm: CalendarViewModel) {
             HeaderBar(vm)
             NowNextSpine(vm, events, now)
             ZoomControl(vm)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(10.dp))
 
             // Horizontal swipe changes the period (month / week / day).
             val swipeable = state.view != ViewMode.AGENDA

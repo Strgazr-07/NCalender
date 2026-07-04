@@ -2,24 +2,37 @@
 
 A minimal, Nothing OS-styled calendar app for Android, built with Kotlin and
 Jetpack Compose. Reads and writes your device's real calendars (Google,
-Outlook, local) via `CalendarContract`, with its own reminder notifications,
-four home-screen widgets, and a dot-matrix aesthetic throughout.
+Outlook, local), or runs fully offline if you'd rather it didn't — with its
+own reminder notifications, four home-screen widgets, and a dot-matrix
+aesthetic throughout.
 
 ## Features
 
 - Month, week, day and agenda views with swipe navigation and smooth
   transition animations
 - Reads/writes the system calendar (multi-account aware, with cross-account
-  duplicate-event de-duplication); falls back to a local store when calendar
-  permission isn't granted
-- Recurring events, drag-to-reschedule, quick month/year picker
-- Custom Nothing-styled date & time pickers (no stock Android dialogs)
-- Its own reminder notifications — scheduled independently so other calendar
-  apps sharing the same account don't also fire their own alerts
-- Four home-screen widgets: next event, dot-matrix date, today's agenda, mini
-  month
+  duplicate-event de-duplication)
+- **Privacy opt-out / local-only mode** — skip calendar permission entirely
+  from first run ("Use offline"), or sign out later from Manage calendars.
+  Events are then stored only in the app's own on-device database; nothing
+  is read from or written to any account
+- Recurring events, drag-to-reschedule, quick month/year picker (swipeable
+  year row)
+- Custom Nothing-styled date & 12-hour time pickers (hour / minute / AM-PM
+  wheels) — no stock Android dialogs anywhere in the app
+- Its own reminder notifications, scheduled independently via AlarmManager so
+  other calendar apps sharing the same account don't also fire their own
+  alerts; reminders whose trigger time has already passed (e.g. an event
+  created minutes before it starts) fire immediately instead of being
+  silently dropped; snooze runs in its own alarm slot so a later sync can't
+  cancel it
+- Four home-screen widgets — next event (with live countdown, correctly
+  shown for events already in progress), dot-matrix date, today's agenda,
+  mini month — bitmap-rendered so they can use the real Nothing fonts, with
+  picker previews that match the live widget design
 - Search by title with recent-search history
-- Light / dark theme, Ndot (dot-matrix) display toggle, haptics
+- Light / dark theme, Ndot (dot-matrix) display toggle, haptics, a type scale
+  shared across every screen (H1/H2/H3/body/label)
 
 ## Requirements
 
@@ -35,7 +48,7 @@ so the `.otf` files are **not included in this repository** and the project
 **will not compile** until you add them yourself:
 
 ```
-android/app/src/main/res/font/
+app/src/main/res/font/
   ndot55_regular.otf
   ndot55caps_regular.otf
   ndot57_regular.otf
@@ -51,38 +64,53 @@ If you have legitimate access to these fonts, place them at the paths above.
 
 If you don't have access to the Nothing fonts and just want the app to
 build, the simplest option is to point `NFonts` in
-[`ui/theme/Type.kt`](android/app/src/main/java/com/ncalendar/app/ui/theme/Type.kt)
+[`ui/theme/Type.kt`](app/src/main/java/com/ncalendar/app/ui/theme/Type.kt)
 at `SpaceGrotesk`/`SpaceMono` (or any other font you add) instead.
+
+**Known quirk:** the `ndot55caps_regular` font fails to render inside Android
+widget *picker previews* specifically (falls back to a system sans there,
+even though it renders fine everywhere else, including the live widgets).
+Every `previewLayout` XML under `res/layout/widget_preview_*.xml` therefore
+uses `ndot55_regular` instead — don't reintroduce the caps variant there.
 
 ## Building
 
 ```bash
-cd android
 export JAVA_HOME="/path/to/your/jdk-17"   # Android Studio ships one under Android Studio/jbr
 ./gradlew assembleDebug                    # debug build
-./gradlew assembleRelease                  # release build (needs signing, see below)
+./gradlew assembleRelease                  # release build (works unsigned; see below to sign)
 ```
 
 The debug build installs alongside a release install (`com.ncalendar.app.debug`
 vs `com.ncalendar.app`) so you can keep both on one device. Debug builds run
 without R8/Compose optimizations and will feel noticeably less smooth than
-release — test performance on a release build, not debug.
+release — test performance and UI feel on a release build, not debug.
 
 ### Signing a release build
 
 Release builds are optional to sign — the build works unsigned if you skip
 this. To produce an installable signed release:
 
-1. Generate a keystore (see `android/keystore.properties.example` for the
-   command).
-2. Copy `android/keystore.properties.example` to `android/keystore.properties`
-   and fill in your values. This file is gitignored — never commit it.
+1. Generate a keystore (see `keystore.properties.example` for the command).
+2. Copy `keystore.properties.example` to `keystore.properties` and fill in
+   your values. This file is gitignored — never commit it.
+
+## Privacy
+
+NCalendar can run in two modes, and you choose which on first launch (and can
+switch anytime from Settings → Manage calendars):
+
+- **Connected** — reads and writes your device's real calendars via
+  `CalendarContract`. Nothing leaves the device either way; this just means
+  the app talks to the OS calendar provider instead of its own database.
+- **Local-only** — no calendar permission is requested at all. Every event
+  you create lives in the app's private Room database, full stop.
 
 ## Project layout
 
 ```
-android/app/src/main/java/com/ncalendar/app/
-  data/           EventRepository, CalendarProvider (system calendar), Room fallback
+app/src/main/java/com/ncalendar/app/
+  data/           EventRepository (system calendar + local-only Room store), CalendarProvider
   notifications/  Own AlarmManager-based reminder scheduling
   widget/         Home-screen widgets (bitmap-rendered for custom fonts)
   ui/screens/     Compose screens (Month/Week/Day/Agenda, Editor, Search, Settings...)

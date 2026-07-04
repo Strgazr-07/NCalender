@@ -27,6 +27,15 @@ class Prefs(context: Context) {
         get() = sp.getInt("default_reminder", 10)
         set(v) = sp.edit().putInt("default_reminder", v).apply()
 
+    /**
+     * Privacy opt-out: when true the app never touches the system/Google
+     * calendars, even if permission is granted — all events live in the
+     * on-device Room store only.
+     */
+    var localOnly: Boolean
+        get() = sp.getBoolean("local_only", false)
+        set(v) = sp.edit().putBoolean("local_only", v).apply()
+
     /** Whether the first-run permission priming screen has been shown/answered. */
     var permissionPrimed: Boolean
         get() = sp.getBoolean("perm_primed", false)

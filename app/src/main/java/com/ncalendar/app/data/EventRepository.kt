@@ -35,7 +35,8 @@ class EventRepository private constructor(
     private val _events = MutableStateFlow<List<EventItem>>(emptyList())
     val events: StateFlow<List<EventItem>> = _events
 
-    val usingSystemCalendar: Boolean get() = provider.hasReadPermission()
+    /** True when the app is reading real device calendars (permission granted AND the user hasn't opted for local-only). */
+    val usingSystemCalendar: Boolean get() = provider.hasReadPermission() && !prefs.localOnly
 
     private var observerRegistered = false
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -46,7 +47,7 @@ class EventRepository private constructor(
     suspend fun refresh(today: LocalDate = LocalDate.now()) {
         val windowStart = today.minusMonths(6)
         val windowEnd = today.plusMonths(18)
-        if (provider.hasReadPermission()) {
+        if (usingSystemCalendar) {
             registerObserver()
             val cals = provider.queryCalendars()
             _calendars.value = cals.ifEmpty { Calendars.all }
@@ -55,7 +56,8 @@ class EventRepository private constructor(
             val endMillis = windowEnd.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             _events.value = provider.queryInstances(startMillis, endMillis, byId, prefs.allEventReminders())
         } else {
-            // No calendar permission: only locally created events (Room), no fake data.
+            // Local-only (privacy opt-out) or no permission: events live in the
+            // on-device Room store, never in the system provider.
             _calendars.value = Calendars.all
             val base = dao.observeAll().first().map { it.toDomain() }
             _events.value = base.flatMap { Recurrence.expand(it, windowStart, windowEnd) }
@@ -81,7 +83,7 @@ class EventRepository private constructor(
     /** Create or update. Returns the (possibly new) base id. */
     suspend fun save(event: EventItem, calendarId: String): String {
         val baseId = Recurrence.baseId(event.id)
-        if (provider.hasWritePermission() && calendarId.toLongOrNull() != null) {
+        if (!prefs.localOnly && provider.hasWritePermission() && calendarId.toLongOrNull() != null) {
             val rrule = event.repeat.toRRule()
             val isNew = baseId.toLongOrNull() == null || baseId.startsWith("n")
             val savedId = if (isNew) {
@@ -100,7 +102,7 @@ class EventRepository private constructor(
 
     suspend fun delete(id: String) {
         val baseId = Recurrence.baseId(id)
-        if (provider.hasWritePermission() && baseId.toLongOrNull() != null) {
+        if (!prefs.localOnly && provider.hasWritePermission() && baseId.toLongOrNull() != null) {
             provider.delete(baseId)
             prefs.clearEventReminders(baseId)
             refresh()

@@ -56,6 +56,16 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     var darkTheme by mutableStateOf(prefs.darkTheme)
         private set
 
+    /** Privacy opt-out: never read/write the system (Google) calendars; Room only. */
+    var localOnly by mutableStateOf(prefs.localOnly)
+        private set
+
+    fun updateLocalOnly(v: Boolean) {
+        prefs.localOnly = v
+        localOnly = v
+        viewModelScope.launch { repo.refresh(today) }
+    }
+
     fun updateDarkTheme(dark: Boolean) {
         darkTheme = dark
         prefs.darkTheme = dark

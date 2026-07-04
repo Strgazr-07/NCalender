@@ -52,13 +52,15 @@ object ReminderScheduler {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
         val now = System.currentTimeMillis()
 
+        val startMillis = event.start.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         event.reminders.take(MAX_SLOTS).forEachIndexed { slot, minutesBefore ->
-            val triggerAt = event.start
-                .minusMinutes(minutesBefore.toLong())
-                .atZone(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-            if (triggerAt <= now) return@forEachIndexed
+            var triggerAt = startMillis - minutesBefore * 60_000L
+            // Event already started — nothing to remind about.
+            if (startMillis <= now) return@forEachIndexed
+            // Reminder time already passed but the event is still ahead (e.g. the
+            // event was created minutes before it starts) — fire right away
+            // instead of silently dropping the notification.
+            if (triggerAt <= now) triggerAt = now + 5_000L
 
             val pending = pendingIntent(context, event, slot, minutesBefore, create = true) ?: return@forEachIndexed
             scheduleExact(alarmManager, triggerAt, pending)

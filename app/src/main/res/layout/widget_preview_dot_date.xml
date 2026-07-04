@@ -23,28 +23,29 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:text="THU"
-            android:textColor="#8A8A88"
+            android:textColor="#FFFFFF"
             android:textSize="11sp"
-            android:letterSpacing="0.2"
-            android:fontFamily="@font/ntype82_mono" />
+            android:letterSpacing="0.1"
+            android:fontFamily="@font/ndot55_regular" />
     </LinearLayout>
 
     <TextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:gravity="center_vertical"
+        android:gravity="center"
         android:text="24"
         android:textColor="#FFFFFF"
         android:textSize="52sp"
-        android:fontFamily="@font/ndot55_regular" />
+        android:fontFamily="@font/ntype82_regular" />
 
     <TextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
         android:text="JULY 2026"
-        android:textColor="#565654"
+        android:textColor="#FFFFFF"
         android:textSize="10sp"
-        android:letterSpacing="0.15"
+        android:letterSpacing="0.14"
         android:fontFamily="@font/ntype82_mono" />
 </LinearLayout>
