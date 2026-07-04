@@ -5,8 +5,8 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Launcher crops the canvas to the inner 72dp; scale so the tile
-         fills ~50% of the visible circle -->
+    <!-- Themed-icon layer: launcher tints via alpha, so only shape matters.
+         Same 0.68 scale as the foreground so both modes match -->
     <group
         android:pivotX="54"
         android:pivotY="54"
@@ -15,7 +15,7 @@
         android:translateY="-1.4">
 
     <path
-        android:fillColor="#F2F2F0"
+        android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
         android:pathData="M40,30 h28 a12,12 0 0 1 12,12 v28 a12,12 0 0 1 -12,12 h-28 a12,12 0 0 1 -12,-12 v-28 a12,12 0 0 1 12,-12 Z
             M38.75,39 h30.5 a2.75,2.75 0 0 1 0,5.5 h-30.5 a2.75,2.75 0 0 1 0,-5.5 Z
@@ -25,10 +25,8 @@
             M35.7,68 a4.3,4.3 0 1 0 8.6,0 a4.3,4.3 0 1 0 -8.6,0 Z
             M63.7,68 a4.3,4.3 0 1 0 8.6,0 a4.3,4.3 0 1 0 -8.6,0 Z
             M47,68 a7,7 0 1 0 14,0 a7,7 0 1 0 -14,0 Z" />
-
-    <!-- Today: red dot centered in the large punched hole -->
     <path
-        android:fillColor="#D71921"
+        android:fillColor="#FFFFFF"
         android:pathData="M50.8,68 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 Z" />
 
     </group>
