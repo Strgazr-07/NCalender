@@ -11,7 +11,8 @@ enum class RepeatRule(val label: String) {
     DAILY("Daily"),
     WEEKLY("Weekly"),
     WEEKDAY("Weekdays"),
-    MONTHLY("Monthly");
+    MONTHLY("Monthly"),
+    YEARLY("Yearly");
 
     /** iCal RRULE for the system calendar provider, or null for non-repeating. */
     fun toRRule(): String? = when (this) {
@@ -20,6 +21,7 @@ enum class RepeatRule(val label: String) {
         WEEKLY -> "FREQ=WEEKLY"
         WEEKDAY -> "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
         MONTHLY -> "FREQ=MONTHLY"
+        YEARLY -> "FREQ=YEARLY"
     }
 
     companion object {
@@ -32,6 +34,7 @@ enum class RepeatRule(val label: String) {
             return when {
                 r.contains("FREQ=DAILY") -> DAILY
                 r.contains("FREQ=MONTHLY") -> MONTHLY
+                r.contains("FREQ=YEARLY") -> YEARLY
                 r.contains("FREQ=WEEKLY") && r.contains("BYDAY=MO,TU,WE,TH,FR") -> WEEKDAY
                 r.contains("FREQ=WEEKLY") -> WEEKLY
                 else -> WEEKLY

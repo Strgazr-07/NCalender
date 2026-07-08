@@ -43,6 +43,7 @@ object Recurrence {
         RepeatRule.WEEKLY -> day.dayOfWeek == anchor.dayOfWeek
         RepeatRule.WEEKDAY -> day.dayOfWeek != DayOfWeek.SATURDAY && day.dayOfWeek != DayOfWeek.SUNDAY
         RepeatRule.MONTHLY -> day.dayOfMonth == anchor.dayOfMonth
+        RepeatRule.YEARLY -> day.dayOfMonth == anchor.dayOfMonth && day.month == anchor.month
         RepeatRule.NONE -> day == anchor
     }
 }

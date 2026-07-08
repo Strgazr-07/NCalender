@@ -107,6 +107,19 @@ class MiniMonthWidget : BaseCalendarWidget() {
     }
 }
 
+class SplitWidget : BaseCalendarWidget() {
+    override fun renderBitmap(context: Context, w: Int, h: Int, events: List<EventItem>, now: LocalDateTime): Bitmap {
+        val today = LocalDate.now()
+        val eventDays = events.flatMap {
+            generateSequence(it.startDate) { d -> if (d.isBefore(it.endDate)) d.plusDays(1) else null }.toList()
+        }.toSet()
+        val upcoming = events
+            .filter { if (it.allDay) !it.endDate.isBefore(today) else it.end.isAfter(now) }
+            .sortedWith(compareBy<EventItem> { it.start }.thenByDescending { it.allDay })
+        return WidgetRenderer.renderSplit(context, w, h, eventDays, upcoming)
+    }
+}
+
 /** Refresh every placed NCalendar widget after the event store changes. */
 object AppWidgets {
     private val providers = listOf(
@@ -114,6 +127,8 @@ object AppWidgets {
         DotDateWidget::class.java,
         AgendaWidget::class.java,
         MiniMonthWidget::class.java,
+        UpcomingWidget::class.java,
+        SplitWidget::class.java,
     )
 
     fun refreshAll(context: Context) {

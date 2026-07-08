@@ -4,12 +4,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -167,19 +167,47 @@ fun AppScreen(vm: CalendarViewModel) {
 
 @Composable
 private fun TopUtilityRow(vm: CalendarViewModel) {
+    val state = vm.state
+    val showBackToday = when (state.view) {
+        ViewMode.MONTH -> state.anchor.year != vm.today.year || state.anchor.monthValue != vm.today.monthValue
+        else -> state.selDay != vm.today
+    }
     Row(
         Modifier
             .fillMaxWidth()
             .padding(top = 14.dp, start = ScreenPad - 6.dp, end = ScreenPad - 6.dp),
-        horizontalArrangement = Arrangement.End,
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.clickable { vm.go(Screen.SEARCH) }.padding(8.dp)) {
-            SearchGlyph(size = 20.dp)
+        // "Back to today" lives up here in the top bar's free space so it never
+        // pushes the month title and grid down the page.
+        AnimatedVisibility(
+            visible = showBackToday,
+            enter = fadeIn(tween(200)) + expandHorizontally(tween(200)),
+            exit = fadeOut(tween(150)) + shrinkHorizontally(tween(180)),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(start = 6.dp)
+                    .background(NColors.surfaceAlt, RoundedCornerShape(20.dp))
+                    .border(1.dp, NColors.borderStrong, RoundedCornerShape(20.dp))
+                    .clickable { vm.goToday() }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            ) {
+                Dot(vm.accent, size = 6.dp)
+                Spacer(Modifier.width(8.dp))
+                MonoLabel("Back to today", color = NColors.textSecondary)
+            }
         }
-        Spacer(Modifier.width(10.dp))
-        Box(Modifier.clickable { vm.go(Screen.SETTINGS) }.padding(8.dp)) {
-            GearGlyph(size = 21.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.clickable { vm.go(Screen.SEARCH) }.padding(8.dp)) {
+                SearchGlyph(size = 20.dp)
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.clickable { vm.go(Screen.SETTINGS) }.padding(8.dp)) {
+                GearGlyph(size = 21.dp)
+            }
         }
     }
 }
@@ -210,11 +238,6 @@ private fun HeaderBar(vm: CalendarViewModel) {
             sub = st.year.toString()
         }
     }
-    val showBackToday = when (state.view) {
-        ViewMode.MONTH -> state.anchor.year != vm.today.year || state.anchor.monthValue != vm.today.monthValue
-        else -> state.selDay != vm.today
-    }
-
     Column(Modifier.padding(top = 10.dp, start = ScreenPad, end = ScreenPad, bottom = 14.dp)) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(
@@ -261,29 +284,6 @@ private fun HeaderBar(vm: CalendarViewModel) {
             }
             RoundIconButton("‹", onClick = { vm.goPrev() }, modifier = Modifier.align(Alignment.CenterStart))
             RoundIconButton("›", onClick = { vm.goNext() }, modifier = Modifier.align(Alignment.CenterEnd))
-        }
-        AnimatedVisibility(
-            visible = showBackToday,
-            enter = fadeIn(tween(200)) + expandVertically(tween(220)),
-            exit = fadeOut(tween(150)) + shrinkVertically(tween(200)),
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(top = 16.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(NColors.surfaceAlt, RoundedCornerShape(22.dp))
-                        .border(1.dp, NColors.borderStrong, RoundedCornerShape(22.dp))
-                        .clickable { vm.goToday() }
-                        .padding(horizontal = 18.dp, vertical = 9.dp),
-                ) {
-                    Dot(vm.accent, size = 6.dp)
-                    Spacer(Modifier.width(9.dp))
-                    MonoLabel("Back to today", color = NColors.textSecondary)
-                }
-            }
         }
     }
 }

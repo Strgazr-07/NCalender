@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,7 @@ import com.ncalendar.app.viewmodel.Screen
 @Composable
 fun SettingsScreen(vm: CalendarViewModel) {
     val context = LocalContext.current
+    val events by vm.events.collectAsState()
 
     Column(Modifier.fillMaxSize().background(NColors.bg).statusBarsPadding()) {
         Column(Modifier.padding(top = 12.dp, start = ScreenPad, end = ScreenPad, bottom = 8.dp)) {
@@ -90,6 +92,12 @@ fun SettingsScreen(vm: CalendarViewModel) {
             SectionLabel("Calendars")
             SettingsCard {
                 NavRow("Manage calendars", value = "") { vm.go(Screen.ACCOUNTS) }
+            }
+
+            // Subscribed .ics / webcal feeds — its own section (renders its own header).
+            if (vm.canSubscribe) {
+                Spacer(Modifier.height(26.dp))
+                SubscriptionsSection(vm, events)
             }
 
             SectionLabel("Reminders & notifications")

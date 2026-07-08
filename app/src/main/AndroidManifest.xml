@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- Fetching subscribed .ics calendar feeds. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".NCalendarApp"
@@ -90,6 +93,35 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_mini_month" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.UpcomingWidget"
+            android:exported="false"
+            android:label="NCalendar · Upcoming">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_upcoming" />
+        </receiver>
+
+        <service
+            android:name=".widget.UpcomingRemoteViewsService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
+        <receiver
+            android:name=".widget.SplitWidget"
+            android:exported="false"
+            android:label="NCalendar · Split view">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_split" />
         </receiver>
     </application>
 </manifest>

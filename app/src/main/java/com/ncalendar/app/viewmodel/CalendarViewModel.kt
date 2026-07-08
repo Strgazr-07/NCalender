@@ -1,6 +1,7 @@
 package com.ncalendar.app.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +15,10 @@ import com.ncalendar.app.data.EventItem
 import com.ncalendar.app.data.EventRepository
 import com.ncalendar.app.data.Prefs
 import com.ncalendar.app.data.RepeatRule
+import com.ncalendar.app.data.ics.IcsSubscription
+import com.ncalendar.app.data.ics.IcsSyncManager
+import com.ncalendar.app.data.ics.IcsSyncWorker
+import com.ncalendar.app.data.ics.SubscriptionCalendars
 import com.ncalendar.app.notifications.ReminderScheduler
 import com.ncalendar.app.widget.AppWidgets
 import kotlinx.coroutines.delay
@@ -31,6 +36,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = EventRepository.get(app)
     private val prefs = Prefs(app)
+    private val appCtx: Context = app.applicationContext
 
     val today: LocalDate = LocalDate.now()
 
@@ -66,6 +72,63 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.refresh(today) }
     }
 
+    // ---------------- .ics subscriptions ----------------
+
+    /** The subscribed-feed registry (mirrored events live in the system calendar). */
+    var subscriptions by mutableStateOf(prefs.icsSubscriptions)
+        private set
+    var syncingSubs by mutableStateOf(false)
+        private set
+
+    /** Subscriptions need real calendar access — they mirror into a local calendar. */
+    val canSubscribe: Boolean get() = repo.usingSystemCalendar
+
+    fun addSubscription(rawUrl: String, name: String, colorArgb: Int) {
+        val url = IcsSubscription.normalizeUrl(rawUrl)
+        val sub = IcsSubscription(url = url, name = name.ifBlank { hostOf(url) }, colorArgb = colorArgb)
+        subscriptions = (prefs.icsSubscriptions + sub).also { prefs.icsSubscriptions = it }
+        IcsSyncWorker.schedulePeriodic(appCtx)
+        viewModelScope.launch {
+            syncingSubs = true
+            subscriptions = IcsSyncManager.syncOne(appCtx, sub.id)
+            repo.refresh(today)
+            AppWidgets.refreshAll(appCtx)
+            syncingSubs = false
+        }
+    }
+
+    fun refreshSubscriptions() {
+        if (subscriptions.isEmpty() || syncingSubs) return
+        viewModelScope.launch {
+            syncingSubs = true
+            subscriptions = IcsSyncManager.syncAll(appCtx)
+            repo.refresh(today)
+            AppWidgets.refreshAll(appCtx)
+            syncingSubs = false
+        }
+    }
+
+    fun removeSubscription(id: String) {
+        val sub = prefs.icsSubscriptions.find { it.id == id }
+        subscriptions = prefs.icsSubscriptions.filterNot { it.id == id }.also { prefs.icsSubscriptions = it }
+        if (subscriptions.isEmpty()) IcsSyncWorker.cancelPeriodic(appCtx)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            sub?.calendarId?.let { SubscriptionCalendars.deleteCalendar(appCtx, it) }
+            repo.refresh(today)
+            AppWidgets.refreshAll(appCtx)
+        }
+    }
+
+    /** Refresh feeds on open if any are stale (older than an hour), without blocking. */
+    private fun maybeAutoSyncSubscriptions() {
+        if (!repo.usingSystemCalendar || subscriptions.isEmpty()) return
+        val hourAgo = System.currentTimeMillis() - 60 * 60 * 1000
+        if (subscriptions.any { it.lastSyncEpoch < hourAgo }) refreshSubscriptions()
+    }
+
+    private fun hostOf(url: String): String =
+        runCatching { java.net.URI(url).host?.removePrefix("www.") }.getOrNull() ?: "Subscription"
+
     fun updateDarkTheme(dark: Boolean) {
         darkTheme = dark
         prefs.darkTheme = dark
@@ -81,6 +144,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { repo.refresh(today) }
+        maybeAutoSyncSubscriptions()
         viewModelScope.launch {
             while (true) {
                 _now.value = LocalDateTime.now()
@@ -102,6 +166,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     /** Re-read the store — call on resume and after granting calendar permission. */
     fun onResume() {
         viewModelScope.launch { repo.refresh(today) }
+        maybeAutoSyncSubscriptions()
     }
 
     /** The calendar new events default into (primary/first writable). */
@@ -247,6 +312,9 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun goToday() { state = state.copy(anchor = today, selDay = today) }
+
+    /** Jump into the day timeline for [day] — the "open this day's events" action. */
+    fun openDayView(day: LocalDate) { state = state.copy(selDay = day, anchor = day, view = ViewMode.DAY) }
 
     // ---------------- month/year picker ----------------
 

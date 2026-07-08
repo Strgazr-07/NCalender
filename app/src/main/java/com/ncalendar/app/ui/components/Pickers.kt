@@ -173,6 +173,71 @@ fun NTimePickerSheet(
     }
 }
 
+// ------------------------------------------------------------- reminder picker
+
+/** Custom "remind me N minutes/hours/days/weeks before" wheel. Emits minutes-before. */
+@Composable
+fun NReminderPickerSheet(
+    accent: Color,
+    ndot: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+) {
+    val units = listOf("Minutes" to 1, "Hours" to 60, "Days" to 1440, "Weeks" to 10080)
+    var amount by remember { mutableStateOf(10) }
+    var unitIndex by remember { mutableStateOf(0) }
+
+    PickerSheet("Custom reminder", onDismiss) {
+        Box(Modifier.fillMaxWidth().height(WHEEL_ITEM_H * WHEEL_VISIBLE)) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .height(WHEEL_ITEM_H)
+                    .background(NColors.surfaceHi, RoundedCornerShape(12.dp))
+                    .border(1.dp, NColors.borderStrong, RoundedCornerShape(12.dp)),
+            )
+            Row(
+                Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                WheelColumn(
+                    labels = (1..60).map { it.toString() },
+                    initialIndex = amount - 1,
+                    ndot = ndot,
+                    onSelected = { amount = it + 1 },
+                )
+                Spacer(Modifier.width(14.dp))
+                WheelColumn(
+                    labels = units.map { it.first },
+                    initialIndex = unitIndex,
+                    ndot = false,
+                    onSelected = { unitIndex = it },
+                    width = 108.dp,
+                    textSize = 17.sp,
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "before the event starts",
+            color = NColors.textFaint,
+            fontFamily = NFonts.Mono,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        SheetButtons(
+            accent = accent,
+            confirmLabel = "Add reminder",
+            onDismiss = onDismiss,
+            onConfirm = { onConfirm(amount * units[unitIndex].second) },
+        )
+    }
+}
+
 /** A snapping wheel: 5 visible rows, the centered one is selected (reported by index). */
 @Composable
 private fun WheelColumn(

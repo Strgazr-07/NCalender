@@ -17,6 +17,15 @@
 -keep class com.ncalendar.app.widget.** { *; }
 -keep class com.ncalendar.app.notifications.** { *; }
 
+# --- biweekly (ICS parsing): model classes are referenced reflectively by its
+# scribe registry; its optional integrations (jsoup/xml) are not shipped.
+-keep class biweekly.** { *; }
+-dontwarn biweekly.**
+-dontwarn com.github.mangstadt.vinnie.**
+-dontwarn org.jsoup.**
+-dontwarn javax.xml.**
+-dontwarn javax.cache.**
+
 # --- Keep line numbers for readable crash reports
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

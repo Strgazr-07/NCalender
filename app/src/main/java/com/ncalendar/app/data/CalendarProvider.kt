@@ -108,7 +108,11 @@ class CalendarProvider(private val context: Context) {
                         Instant.ofEpochMilli(begin).atZone(zone).toLocalDateTime()
                     }
                     val endLdt = if (allDay) {
-                        Instant.ofEpochMilli(end).atZone(ZoneId.of("UTC")).toLocalDate().atStartOfDay()
+                        // The provider stores an all-day END exclusively: UTC midnight of
+                        // the day AFTER the last day. Pull it back to the inclusive last
+                        // day so a single-day event doesn't bleed onto the next day.
+                        val lastDay = Instant.ofEpochMilli(end).atZone(ZoneId.of("UTC")).toLocalDate().minusDays(1)
+                        maxOf(startLdt.toLocalDate(), lastDay).atStartOfDay()
                     } else {
                         Instant.ofEpochMilli(end).atZone(zone).toLocalDateTime()
                     }
@@ -148,14 +152,23 @@ class CalendarProvider(private val context: Context) {
         val values = ContentValues().apply {
             put(CalendarContract.Events.CALENDAR_ID, calendarId.toLongOrNull() ?: return null)
             put(CalendarContract.Events.TITLE, event.title)
-            put(CalendarContract.Events.DTSTART, event.start.toMillis())
             put(CalendarContract.Events.ALL_DAY, if (event.allDay) 1 else 0)
-            put(CalendarContract.Events.EVENT_TIMEZONE, tz)
+            // All-day events MUST be stored at UTC midnight per the CalendarContract
+            // contract; timed events use the device zone. Writing device-zone millis
+            // for an all-day event shifts it a day in any non-UTC timezone.
+            if (event.allDay) {
+                put(CalendarContract.Events.DTSTART, event.start.toUtcMidnightMillis())
+                put(CalendarContract.Events.EVENT_TIMEZONE, "UTC")
+            } else {
+                put(CalendarContract.Events.DTSTART, event.start.toMillis())
+                put(CalendarContract.Events.EVENT_TIMEZONE, tz)
+            }
             if (rrule != null) {
                 put(CalendarContract.Events.RRULE, rrule)
                 put(CalendarContract.Events.DURATION, durationString(event))
             } else {
-                put(CalendarContract.Events.DTEND, event.end.toMillis())
+                put(CalendarContract.Events.DTEND, endMillis(event))
+                if (event.allDay) put(CalendarContract.Events.EVENT_END_TIMEZONE, "UTC")
             }
             event.location?.let { put(CalendarContract.Events.EVENT_LOCATION, it) }
             event.notes?.let { put(CalendarContract.Events.DESCRIPTION, it) }
@@ -174,15 +187,25 @@ class CalendarProvider(private val context: Context) {
         val values = ContentValues().apply {
             put(CalendarContract.Events.TITLE, event.title)
             put(CalendarContract.Events.CALENDAR_ID, calendarId.toLongOrNull() ?: return false)
-            put(CalendarContract.Events.DTSTART, event.start.toMillis())
             put(CalendarContract.Events.ALL_DAY, if (event.allDay) 1 else 0)
-            put(CalendarContract.Events.EVENT_TIMEZONE, tz)
+            // All-day writes use UTC midnight; timed writes use the device zone.
+            // EVENT_END_TIMEZONE is set explicitly so toggling all-day on an
+            // existing event doesn't leave a stale end zone behind.
+            if (event.allDay) {
+                put(CalendarContract.Events.DTSTART, event.start.toUtcMidnightMillis())
+                put(CalendarContract.Events.EVENT_TIMEZONE, "UTC")
+            } else {
+                put(CalendarContract.Events.DTSTART, event.start.toMillis())
+                put(CalendarContract.Events.EVENT_TIMEZONE, tz)
+            }
             if (rrule != null) {
                 put(CalendarContract.Events.RRULE, rrule)
                 put(CalendarContract.Events.DURATION, durationString(event))
                 putNull(CalendarContract.Events.DTEND)
+                putNull(CalendarContract.Events.EVENT_END_TIMEZONE)
             } else {
-                put(CalendarContract.Events.DTEND, event.end.toMillis())
+                put(CalendarContract.Events.DTEND, endMillis(event))
+                put(CalendarContract.Events.EVENT_END_TIMEZONE, if (event.allDay) "UTC" else tz)
                 putNull(CalendarContract.Events.RRULE)
                 putNull(CalendarContract.Events.DURATION)
             }
@@ -229,11 +252,31 @@ class CalendarProvider(private val context: Context) {
         }
     }
 
-    private fun durationString(event: EventItem): String {
-        val minutes = java.time.temporal.ChronoUnit.MINUTES.between(event.start, event.end).coerceAtLeast(0)
-        return "PT${minutes}M"
-    }
+    private fun durationString(event: EventItem): String =
+        if (event.allDay) {
+            // All-day durations are whole days (end date is inclusive here).
+            val days = java.time.temporal.ChronoUnit.DAYS
+                .between(event.start.toLocalDate(), event.end.toLocalDate()) + 1
+            "P${days.coerceAtLeast(1)}D"
+        } else {
+            val minutes = java.time.temporal.ChronoUnit.MINUTES.between(event.start, event.end).coerceAtLeast(0)
+            "PT${minutes}M"
+        }
 
     private fun LocalDateTime.toMillis(): Long =
         atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    /** All-day DTSTART/DTEND must be expressed at UTC midnight per CalendarContract. */
+    private fun LocalDateTime.toUtcMidnightMillis(): Long =
+        toLocalDate().atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+
+    /**
+     * DTEND in millis. All-day END is exclusive — UTC midnight of the day AFTER the
+     * inclusive last day; timed events keep their device-zone end.
+     */
+    private fun endMillis(event: EventItem): Long =
+        if (event.allDay)
+            event.end.toLocalDate().plusDays(1).atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+        else
+            event.end.toMillis()
 }

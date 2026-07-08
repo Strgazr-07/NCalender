@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,6 +39,7 @@ import com.ncalendar.app.data.CalendarFormats
 import com.ncalendar.app.data.RepeatRule
 import com.ncalendar.app.ui.components.MonoLabel
 import com.ncalendar.app.ui.components.NDatePickerSheet
+import com.ncalendar.app.ui.components.NReminderPickerSheet
 import com.ncalendar.app.ui.components.NTimePickerSheet
 import com.ncalendar.app.ui.components.Pill
 import com.ncalendar.app.ui.theme.NColors
@@ -54,6 +56,10 @@ fun EditorScreen(vm: CalendarViewModel) {
     val form = vm.state.form ?: return
     val isEditing = vm.state.editId != null
     var picker by remember { mutableStateOf<PickerField?>(null) }
+    var remPickerOpen by remember { mutableStateOf(false) }
+    // Dismiss the keyboard before opening a wheel sheet — otherwise the IME sits
+    // over the picker on tall keyboards (e.g. Nothing Phone 3) and hides it.
+    val focus = LocalFocusManager.current
 
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().background(NColors.bg).statusBarsPadding()) {
@@ -133,16 +139,16 @@ fun EditorScreen(vm: CalendarViewModel) {
                 date = form.startDate,
                 time = form.startTime,
                 showTime = !form.allDay,
-                onDateClick = { picker = PickerField.START_DATE },
-                onTimeClick = { picker = PickerField.START_TIME },
+                onDateClick = { focus.clearFocus(); picker = PickerField.START_DATE },
+                onTimeClick = { focus.clearFocus(); picker = PickerField.START_TIME },
             )
             DateTimeRow(
                 label = "Ends",
                 date = form.endDate,
                 time = form.endTime,
                 showTime = !form.allDay,
-                onDateClick = { picker = PickerField.END_DATE },
-                onTimeClick = { picker = PickerField.END_TIME },
+                onDateClick = { focus.clearFocus(); picker = PickerField.END_DATE },
+                onTimeClick = { focus.clearFocus(); picker = PickerField.END_TIME },
             )
 
             MonoLabel("Repeat", color = NColors.textFaint, modifier = Modifier.padding(top = 20.dp, bottom = 9.dp))
@@ -153,8 +159,10 @@ fun EditorScreen(vm: CalendarViewModel) {
             }
 
             MonoLabel("Reminders", color = NColors.textFaint, modifier = Modifier.padding(top = 20.dp, bottom = 9.dp))
+            val reminderPresets = listOf(0 to "At time", 10 to "10 min", 30 to "30 min", 60 to "1 hr", 1440 to "1 day")
+            val presetValues = reminderPresets.map { it.first }.toSet()
             FlowRow {
-                listOf(0 to "At time", 10 to "10 min", 30 to "30 min", 60 to "1 hr", 1440 to "1 day").forEach { (m, label) ->
+                reminderPresets.forEach { (m, label) ->
                     val on = form.reminders.contains(m)
                     Pill(
                         text = label,
@@ -165,6 +173,16 @@ fun EditorScreen(vm: CalendarViewModel) {
                         },
                     )
                 }
+                // Any custom (non-preset) reminders show as their own removable chips.
+                form.reminders.filterNot { it in presetValues }.sorted().forEach { m ->
+                    Pill(
+                        text = CalendarFormats.reminderLabel(m),
+                        selected = true,
+                        accentColor = vm.accent,
+                        onClick = { vm.patchForm { f -> f.copy(reminders = f.reminders.filterNot { it == m }) } },
+                    )
+                }
+                Pill(text = "Custom…", selected = false, onClick = { focus.clearFocus(); remPickerOpen = true })
             }
 
             TextField(
@@ -229,6 +247,18 @@ fun EditorScreen(vm: CalendarViewModel) {
             onConfirm = { t -> vm.patchForm { it.copy(endTime = t) }; picker = null },
         )
         null -> {}
+    }
+
+    if (remPickerOpen) {
+        NReminderPickerSheet(
+            accent = vm.accent,
+            ndot = vm.ndot,
+            onDismiss = { remPickerOpen = false },
+            onConfirm = { minutes ->
+                vm.patchForm { f -> f.copy(reminders = (f.reminders + minutes).distinct()) }
+                remPickerOpen = false
+            },
+        )
     }
     }
 }

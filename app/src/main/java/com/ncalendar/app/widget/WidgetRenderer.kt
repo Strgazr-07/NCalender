@@ -156,6 +156,43 @@ object WidgetRenderer {
         return bmp
     }
 
+    /**
+     * One row for the scrollable list widget, in the app's "This Week" day-grouped
+     * language: a day column (weekday + big number, accent when today) drawn ONLY on
+     * the first event of each date ([day] == null otherwise), then the event to its
+     * right. Flat/transparent — the list container draws the rounded card.
+     */
+    fun renderUpcomingRow(context: Context, w: Int, h: Int, e: EventItem, day: LocalDate?, today: LocalDate): Bitmap {
+        val bmp = Bitmap.createBitmap(w.coerceAtLeast(1), h.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val pad = w * 0.05f
+        val dayColW = w * 0.19f
+        if (day != null) {
+            val isToday = day == today
+            c.drawText(
+                CalendarFormats.DOW[CalendarFormats.dowIndex(day)],
+                pad + dayColW / 2f, h * 0.38f,
+                paint(mono(context), h * 0.15f, if (isToday) accent(context) else DIM, 0.06f, Paint.Align.CENTER),
+            )
+            c.drawText(
+                day.dayOfMonth.toString(),
+                pad + dayColW / 2f, h * 0.80f,
+                paint(ndot(context), h * 0.30f, if (isToday) accent(context) else WHITE, align = Paint.Align.CENTER),
+            )
+        }
+        val ex = pad + dayColW
+        val dotR = h * 0.05f
+        c.drawCircle(ex + dotR, h * 0.40f, dotR, Paint().apply { color = e.color.toArgb(); isAntiAlias = true })
+        val tx = ex + dotR * 2.5f + w * 0.02f
+        val titleP = paint(body(context), h * 0.21f, WHITE)
+        c.drawText(ellipsize(e.title, w - tx - pad, titleP), tx, h * 0.46f, titleP)
+        val timeP = paint(ndot(context), h * 0.15f, LIGHT)
+        c.drawText(ellipsize(CalendarFormats.timeLabelFor(e), w - tx - pad, timeP), tx, h * 0.76f, timeP)
+        // Divider under the event only (not the day column), so days read as blocks.
+        c.drawLine(ex, h - 1.5f, w - pad, h - 1.5f, strokePaint(GRID, 1.5f))
+        return bmp
+    }
+
     fun renderMiniMonth(context: Context, w: Int, h: Int, eventDays: Set<LocalDate>): Bitmap {
         val (bmp, c) = bitmap(w, h)
         val today = LocalDate.now()
@@ -173,15 +210,125 @@ object WidgetRenderer {
             paint(mono(context), h * 0.06f, DIM, 0.12f, Paint.Align.RIGHT),
         )
 
-        val weekStart = Prefs(context).weekStart // honors the app's first-day setting
-        val cellW = (w - pad * 2) / 7f
+        // Pure grid — clean glance of the month; "month + events" is the Split widget.
+        drawMonthGrid(c, context, pad, h * 0.19f, w - pad, h - h * 0.05f, today, eventDays)
+        return bmp
+    }
 
-        // Day-of-week letters, dot-matrix caps.
-        val dowPaint = paint(ndotCaps(context), h * 0.044f, DIM, 0.08f, Paint.Align.CENTER)
+    /** Split view: month grid on the left, upcoming-events column on the right (app home screen in miniature). */
+    fun renderSplit(
+        context: Context,
+        w: Int,
+        h: Int,
+        eventDays: Set<LocalDate>,
+        upcoming: List<EventItem>,
+    ): Bitmap {
+        val (bmp, c) = bitmap(w, h)
+        val today = LocalDate.now()
+        val pad = h * 0.10f
+        val leftW = w * 0.45f
+
+        // Left: month header + grid.
+        c.drawText(
+            CalendarFormats.MON_FULL[today.monthValue - 1],
+            pad, h * 0.135f, paint(ndotCaps(context), h * 0.07f, WHITE, 0.05f),
+        )
+        c.drawText(
+            today.year.toString(),
+            leftW - pad * 0.4f, h * 0.135f,
+            paint(mono(context), h * 0.052f, DIM, 0.1f, Paint.Align.RIGHT),
+        )
+        drawMonthGrid(c, context, pad, h * 0.21f, leftW - pad * 0.4f, h - pad * 0.9f, today, eventDays)
+
+        // Divider between the two panels.
+        c.drawLine(leftW, h * 0.12f, leftW, h - h * 0.12f, strokePaint(GRID, 1.5f))
+
+        // Right: upcoming list.
+        val rx = leftW + pad * 0.9f
+        labelWithDot(c, context, "UPCOMING", rx, h * 0.14f, paint(mono(context), h * 0.058f, DIM, 0.16f))
+        if (upcoming.isEmpty()) {
+            c.drawText("Nothing scheduled", rx, h * 0.42f, paint(body(context), h * 0.07f, LIGHT))
+        } else {
+            drawEventRows(c, context, upcoming, rx, h * 0.24f, w - pad, h - pad * 0.7f, h.toFloat(), 4, today)
+        }
+        return bmp
+    }
+
+    /**
+     * "This Week" day-grouped rows within the given rect: a day column (weekday + big
+     * number, accent when today) shown once per date, then that date's events (dot +
+     * title + time) to its right.
+     */
+    private fun drawEventRows(
+        c: Canvas,
+        context: Context,
+        events: List<EventItem>,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        refH: Float,
+        maxRows: Int,
+        today: LocalDate,
+    ) {
+        val shown = events.take(maxRows)
+        val rowH = (bottom - top) / maxRows
+        val dayColW = refH * 0.14f
+        val titleP = paint(body(context), refH * 0.062f, WHITE)
+        val timeP = paint(ndot(context), refH * 0.05f, LIGHT)
+        val dotR = refH * 0.016f
+        var prevDate: LocalDate? = null
+        shown.forEachIndexed { i, e ->
+            val rTop = top + rowH * i
+            val d = e.startDate
+            if (d != prevDate) {
+                val isToday = d == today
+                c.drawText(
+                    CalendarFormats.DOW[CalendarFormats.dowIndex(d)],
+                    left + dayColW / 2f, rTop + rowH * 0.36f,
+                    paint(mono(context), refH * 0.045f, if (isToday) accent(context) else DIM, 0.06f, Paint.Align.CENTER),
+                )
+                c.drawText(
+                    d.dayOfMonth.toString(),
+                    left + dayColW / 2f, rTop + rowH * 0.82f,
+                    paint(ndot(context), refH * 0.08f, if (isToday) accent(context) else WHITE, align = Paint.Align.CENTER),
+                )
+                prevDate = d
+            }
+            val ex = left + dayColW
+            c.drawCircle(ex + dotR, rTop + rowH * 0.34f, dotR, Paint().apply { color = e.color.toArgb(); isAntiAlias = true })
+            val tx = ex + dotR * 2.5f + refH * 0.02f
+            c.drawText(ellipsize(e.title, right - tx, titleP), tx, rTop + rowH * 0.42f, titleP)
+            c.drawText(ellipsize(CalendarFormats.timeLabelFor(e), right - tx, timeP), tx, rTop + rowH * 0.78f, timeP)
+        }
+    }
+
+    /**
+     * Draws the month grid (day-of-week letters + this month's day cells with a red
+     * "today" disc and faint event dots) inside [left,top]..[right,bottom]. Shared by
+     * the mini-month and split widgets.
+     */
+    private fun drawMonthGrid(
+        c: Canvas,
+        context: Context,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        today: LocalDate,
+        eventDays: Set<LocalDate>,
+    ) {
+        val weekStart = Prefs(context).weekStart // honors the app's first-day setting
+        val gw = right - left
+        val gh = bottom - top
+        val cellW = gw / 7f
+
+        val dowSize = (gh * 0.085f).coerceAtMost(cellW * 0.5f)
+        val dowPaint = paint(ndotCaps(context), dowSize, DIM, 0.08f, Paint.Align.CENTER)
         for (i in 0 until 7) {
             c.drawText(
                 CalendarFormats.DOW_SHORT[(weekStart + i) % 7],
-                pad + cellW * i + cellW / 2f, h * 0.235f, dowPaint,
+                left + cellW * i + cellW / 2f, top + dowSize, dowPaint,
             )
         }
 
@@ -190,13 +337,13 @@ object WidgetRenderer {
         val offset = (CalendarFormats.dowIndex(first) - weekStart + 7) % 7
         val daysInMonth = today.lengthOfMonth()
         val rows = (offset + daysInMonth + 6) / 7
-        val gridTop = h * 0.285f
-        val cellH = (h - gridTop - h * 0.045f) / rows
+        val gridTop = top + dowSize * 1.9f
+        val cellH = (bottom - gridTop) / rows
         val numPaint = paint(ndot(context), (cellH * 0.42f).coerceAtMost(cellW * 0.46f), WHITE, align = Paint.Align.CENTER)
 
         for (day in 1..daysInMonth) {
             val idx = offset + day - 1
-            val cx = pad + cellW * (idx % 7) + cellW / 2f
+            val cx = left + cellW * (idx % 7) + cellW / 2f
             val cy = gridTop + cellH * (idx / 7) + cellH / 2f
             val baseline = cy - (numPaint.ascent() + numPaint.descent()) / 2f
             val date = first.plusDays((day - 1).toLong())
@@ -212,7 +359,10 @@ object WidgetRenderer {
                 c.drawCircle(cx, cy + cellH * 0.34f, minOf(cellW, cellH) * 0.06f, dot)
             }
         }
-        return bmp
+    }
+
+    private fun strokePaint(color: Int, width: Float) = Paint().apply {
+        this.color = color; isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = width
     }
 
     private fun ellipsize(text: String, maxWidth: Float, p: Paint): String {

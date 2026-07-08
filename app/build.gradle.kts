@@ -88,6 +88,11 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
+
+    // Subscribed .ics calendars: biweekly parses remote feeds; WorkManager refreshes
+    // them in the background.
+    implementation("net.sf.biweekly:biweekly:0.6.8")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 }
 
 composeCompiler {

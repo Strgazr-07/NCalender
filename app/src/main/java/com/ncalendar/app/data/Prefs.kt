@@ -1,9 +1,15 @@
 package com.ncalendar.app.data
 
 import android.content.Context
+import com.ncalendar.app.data.ics.IcsSubscription
 
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("ncalendar_prefs", Context.MODE_PRIVATE)
+
+    /** Subscribed .ics calendar feeds (the mirrored events live in the system calendar). */
+    var icsSubscriptions: List<IcsSubscription>
+        get() = IcsSubscription.listFromJson(sp.getString("ics_subs", "") ?: "")
+        set(v) = sp.edit().putString("ics_subs", IcsSubscription.listToJson(v)).apply()
 
     var ndotNumerals: Boolean
         get() = sp.getBoolean("ndot", true)

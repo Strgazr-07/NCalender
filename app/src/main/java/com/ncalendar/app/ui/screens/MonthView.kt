@@ -3,11 +3,13 @@ package com.ncalendar.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,15 +17,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,8 +38,6 @@ import com.ncalendar.app.ui.theme.NFonts
 import com.ncalendar.app.viewmodel.CalendarViewModel
 import java.time.LocalDate
 
-private val ROW_HEIGHT = 64.dp
-
 @Composable
 fun MonthView(vm: CalendarViewModel, events: List<EventItem>) {
     val state = vm.state
@@ -46,10 +45,13 @@ fun MonthView(vm: CalendarViewModel, events: List<EventItem>) {
     val dowLabels = CalendarFormats.dowShortLabels(vm.weekStart)
     val dayIndex = vm.buildDayIndex(events)
 
+    // The page itself doesn't scroll: the weekday row, month grid and day label
+    // stay pinned, and only the selected day's event list (below) gets a scroll
+    // region — so tapping a busy day no longer pushes the calendar off the top.
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
             .padding(horizontal = ScreenPad),
     ) {
         // Symmetric breathing room around the weekday letters, and brighter text —
@@ -69,13 +71,13 @@ fun MonthView(vm: CalendarViewModel, events: List<EventItem>) {
             }
         }
 
-        // Plain fixed grid — all 42 cells are always visible, so lazy-grid
-        // bookkeeping inside the scrollable column was pure overhead.
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        // The grid flexes to fill the space above the day-summary card, so the card is
+        // always visible without scrolling — the whole point of this redesign.
+        Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             cells.chunked(7).forEach { week ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     week.forEach { date ->
-                        Box(Modifier.weight(1f)) {
+                        Box(Modifier.weight(1f).fillMaxHeight()) {
                             MonthCell(vm, dayIndex[date].orEmpty(), date)
                         }
                     }
@@ -83,57 +85,68 @@ fun MonthView(vm: CalendarViewModel, events: List<EventItem>) {
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(NColors.border))
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
 
+        // A compact, tappable summary of the selected day — date + event count with a
+        // peek of the first couple events. Tap it (or double-tap the grid cell) to open
+        // the day's full timeline, instead of scrolling a cramped strip below the grid.
         val selD = state.selDay
-        MonoLabel(
-            "${CalendarFormats.DOW[CalendarFormats.dowIndex(selD)]}, ${CalendarFormats.MON[selD.monthValue - 1]} ${selD.dayOfMonth}",
-            color = NColors.textDim,
-            size = 12.sp,
-        )
-        Spacer(Modifier.height(12.dp))
+        DaySummaryCard(vm, selD, dayIndex[selD].orEmpty())
+        Spacer(Modifier.height(88.dp)) // leave room for the floating add button
+    }
+}
 
-        val selEvents = dayIndex[selD].orEmpty()
-        if (selEvents.isEmpty()) {
-            Text(
-                "Nothing scheduled.",
-                color = NColors.textGhost,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(vertical = 22.dp),
-            )
-        } else {
-            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 96.dp)) {
-                selEvents.forEachIndexed { i, e ->
-                    if (i != 0) Box(Modifier.fillMaxWidth().height(1.dp).background(NColors.divider))
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { vm.openEvent(e.id) }
-                            .padding(vertical = 15.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            if (e.allDay) "ALL" else CalendarFormats.fmtTime(e.start.toLocalTime()),
-                            color = NColors.textMuted,
-                            fontFamily = NFonts.numeral(vm.ndot),
-                            fontSize = 14.sp,
-                            modifier = Modifier.width(54.dp),
-                        )
-                        Box(
-                            Modifier.width(4.dp).height(34.dp)
-                                .background(e.color, RoundedCornerShape(4.dp)),
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(e.title, color = NColors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                            Spacer(Modifier.height(3.dp))
-                            val meta = (e.location?.let { "$it · " } ?: "") + e.calendarName
-                            Text(meta, color = NColors.textFaint, fontSize = 13.sp, maxLines = 1)
-                        }
-                    }
+@Composable
+private fun DaySummaryCard(vm: CalendarViewModel, day: LocalDate, events: List<EventItem>) {
+    val dateLabel = "${CalendarFormats.DOW[CalendarFormats.dowIndex(day)]}, ${CalendarFormats.MON[day.monthValue - 1]} ${day.dayOfMonth}"
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(NColors.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, NColors.border, RoundedCornerShape(16.dp))
+            .clickable { vm.openDayView(day) }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(dateLabel, color = NColors.textSecondary, fontFamily = NFonts.Mono, fontSize = 13.sp, letterSpacing = 1.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (events.isEmpty()) "Nothing scheduled" else "${events.size} event${if (events.size == 1) "" else "s"}",
+                    color = if (events.isEmpty()) NColors.textFaint else vm.accent,
+                    fontFamily = NFonts.Mono,
+                    fontSize = 12.sp,
+                )
+                if (events.isNotEmpty()) {
+                    Spacer(Modifier.width(6.dp))
+                    Text("›", color = vm.accent, fontSize = 17.sp)
                 }
+            }
+        }
+        if (events.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            events.take(2).forEachIndexed { i, e ->
+                if (i != 0) Spacer(Modifier.height(11.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(7.dp).background(if (NColors.isDark) e.color else NColors.textMuted, CircleShape))
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        if (e.allDay) "ALL" else CalendarFormats.fmtTime(e.start.toLocalTime()),
+                        color = NColors.textMuted,
+                        fontFamily = NFonts.numeral(vm.ndot),
+                        fontSize = 13.sp,
+                        modifier = Modifier.width(52.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(e.title, color = NColors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                }
+            }
+            if (events.size > 2) {
+                Spacer(Modifier.height(11.dp))
+                Text("+${events.size - 2} more", color = NColors.textFaint, fontFamily = NFonts.Mono, fontSize = 12.sp)
             }
         }
     }
@@ -149,11 +162,16 @@ private fun MonthCell(vm: CalendarViewModel, dayEventsAll: List<EventItem>, date
 
     Column(
         Modifier
-            .fillMaxWidth()
-            .height(ROW_HEIGHT)
+            .fillMaxSize()
             .background(if (isSel) NColors.surfaceSel else Color.Transparent, RoundedCornerShape(12.dp))
             .border(1.dp, if (isSel) NColors.textGhostDeep else Color.Transparent, RoundedCornerShape(12.dp))
-            .clickable { vm.selectDay(date) },
+            .pointerInput(date) {
+                // Single tap selects (updates the summary card); double tap opens the day.
+                detectTapGestures(
+                    onTap = { vm.selectDay(date) },
+                    onDoubleTap = { vm.openDayView(date) },
+                )
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -162,22 +180,29 @@ private fun MonthCell(vm: CalendarViewModel, dayEventsAll: List<EventItem>, date
             color = when {
                 isToday -> vm.accent
                 inMonth -> NColors.textPrimary
-                else -> NColors.textGhostDeep
+                else -> NColors.textGhost
             },
-            fontSize = 18.sp,
-            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+            fontSize = 19.sp,
+            fontWeight = when {
+                isToday -> FontWeight.Bold
+                inMonth -> FontWeight.SemiBold
+                else -> FontWeight.Normal
+            },
         )
         Spacer(Modifier.height(7.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             dayEvents.forEach { e ->
                 val dim = !inMonth
+                // Calendar colours (esp. near-white "Personal") disappear on the pale
+                // light background, so light mode uses one monochrome ink; today stays red.
+                val ink = if (NColors.isDark) e.color else NColors.textMuted
                 if (e.allDay) {
                     Box(
                         Modifier.size(6.dp)
-                            .border(1.5.dp, if (dim) NColors.textGhostDeep else NColors.textDim, CircleShape),
+                            .border(1.5.dp, if (dim) NColors.textGhostDeep else NColors.textMuted, CircleShape),
                     )
                 } else {
-                    Dot(if (dim) NColors.textGhostDeep else e.color, size = 6.dp)
+                    Dot(if (dim) NColors.textGhostDeep else ink, size = 6.dp)
                 }
             }
             if (dayEvents.isEmpty()) Spacer(Modifier.size(6.dp))
