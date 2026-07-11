@@ -3,6 +3,9 @@ package com.ncalendar.app.data
 import android.content.Context
 import com.ncalendar.app.data.ics.IcsSubscription
 
+enum class ThemeMode { SYSTEM, DARK, LIGHT }
+enum class DarkBackgroundStyle { AMOLED, GRAY }
+
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("ncalendar_prefs", Context.MODE_PRIVATE)
 
@@ -47,7 +50,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("perm_primed", false)
         set(v) = sp.edit().putBoolean("perm_primed", v).apply()
 
-    /** Dark (default) vs light theme. */
+    var themeMode: ThemeMode
+        get() = runCatching { ThemeMode.valueOf(sp.getString("theme_mode", ThemeMode.DARK.name) ?: ThemeMode.DARK.name) }
+            .getOrDefault(ThemeMode.DARK)
+        set(v) = sp.edit().putString("theme_mode", v.name).apply()
+
+    var darkBackgroundStyle: DarkBackgroundStyle
+        get() = runCatching { DarkBackgroundStyle.valueOf(sp.getString("dark_bg_style", DarkBackgroundStyle.AMOLED.name) ?: DarkBackgroundStyle.AMOLED.name) }
+            .getOrDefault(DarkBackgroundStyle.AMOLED)
+        set(v) = sp.edit().putString("dark_bg_style", v.name).apply()
+
+    /** Dark (default) vs light theme. Kept for older installs; new UI uses themeMode. */
     var darkTheme: Boolean
         get() = sp.getBoolean("dark_theme", true)
         set(v) = sp.edit().putBoolean("dark_theme", v).apply()

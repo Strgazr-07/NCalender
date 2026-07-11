@@ -172,24 +172,32 @@ private fun TopUtilityRow(vm: CalendarViewModel) {
         ViewMode.MONTH -> state.anchor.year != vm.today.year || state.anchor.monthValue != vm.today.monthValue
         else -> state.selDay != vm.today
     }
-    Row(
+    Box(
         Modifier
             .fillMaxWidth()
             .padding(top = 14.dp, start = ScreenPad - 6.dp, end = ScreenPad - 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // "Back to today" lives up here in the top bar's free space so it never
-        // pushes the month title and grid down the page.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            Box(Modifier.clickable { vm.go(Screen.SEARCH) }.padding(8.dp)) {
+                SearchGlyph(size = 20.dp)
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.clickable { vm.go(Screen.SETTINGS) }.padding(8.dp)) {
+                GearGlyph(size = 21.dp)
+            }
+        }
         AnimatedVisibility(
             visible = showBackToday,
             enter = fadeIn(tween(200)) + expandHorizontally(tween(200)),
             exit = fadeOut(tween(150)) + shrinkHorizontally(tween(180)),
+            modifier = Modifier.align(Alignment.Center),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .padding(start = 6.dp)
                     .background(NColors.surfaceAlt, RoundedCornerShape(20.dp))
                     .border(1.dp, NColors.borderStrong, RoundedCornerShape(20.dp))
                     .clickable { vm.goToday() }
@@ -198,15 +206,6 @@ private fun TopUtilityRow(vm: CalendarViewModel) {
                 Dot(vm.accent, size = 6.dp)
                 Spacer(Modifier.width(8.dp))
                 MonoLabel("Back to today", color = NColors.textSecondary)
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.clickable { vm.go(Screen.SEARCH) }.padding(8.dp)) {
-                SearchGlyph(size = 20.dp)
-            }
-            Spacer(Modifier.width(10.dp))
-            Box(Modifier.clickable { vm.go(Screen.SETTINGS) }.padding(8.dp)) {
-                GearGlyph(size = 21.dp)
             }
         }
     }

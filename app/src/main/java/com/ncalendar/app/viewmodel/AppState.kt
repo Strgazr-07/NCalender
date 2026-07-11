@@ -4,11 +4,12 @@ import com.ncalendar.app.data.RepeatRule
 import java.time.LocalDate
 import java.time.LocalTime
 
-enum class Screen { APP, DETAIL, EDITOR, ACCOUNTS, SETTINGS, SEARCH }
+enum class Screen { APP, DETAIL, EDITOR, ACCOUNTS, SETTINGS, SEARCH, DAY_EVENTS }
 enum class ViewMode { MONTH, WEEK, DAY, AGENDA }
 enum class SearchRange(val label: String) { ALL("All"), NEXT7("Next 7d"), NEXT30("Next 30d"), PAST("Past") }
+enum class DragMode { MOVE, RESIZE_END }
 
-data class DragState(val eventId: String, val deltaMinutes: Int)
+data class DragState(val eventId: String, val deltaMinutes: Int, val mode: DragMode = DragMode.MOVE)
 data class SwipeState(val eventId: String, val dx: Float)
 
 data class EventForm(
@@ -21,6 +22,10 @@ data class EventForm(
     val endDate: LocalDate,
     val endTime: LocalTime,
     val repeat: RepeatRule,
+    val repeatInterval: Int = 1,
+    val repeatByDays: Set<Int> = emptySet(),
+    val repeatEndDate: LocalDate? = null,
+    val repeatEndCount: Int? = null,
     val reminders: List<Int>,
     val location: String,
     val notes: String,

@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ncalendar.app.data.CalendarFormats
+import com.ncalendar.app.data.RepeatRule
 import com.ncalendar.app.ui.theme.NColors
 import com.ncalendar.app.ui.theme.NFonts
 import java.time.LocalDate
@@ -238,9 +239,153 @@ fun NReminderPickerSheet(
     }
 }
 
+// --------------------------------------------------------- custom recurrence
+
+@Composable
+fun NCustomRecurrenceSheet(
+    initialRule: RepeatRule,
+    initialInterval: Int,
+    initialByDays: Set<Int>,
+    initialUntil: LocalDate?,
+    initialCount: Int?,
+    weekStart: Int,
+    today: LocalDate,
+    accent: Color,
+    ndot: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (RepeatRule, Int, Set<Int>, LocalDate?, Int?) -> Unit,
+) {
+    var rule by remember { mutableStateOf(if (initialRule == RepeatRule.NONE) RepeatRule.WEEKLY else initialRule) }
+    var interval by remember { mutableStateOf(initialInterval.coerceAtLeast(1)) }
+    var byDays by remember { mutableStateOf(initialByDays.ifEmpty { setOf(today.dayOfWeek.value) }) }
+    var endMode by remember {
+        mutableStateOf(
+            when {
+                initialUntil != null -> "Until"
+                initialCount != null -> "After"
+                else -> "Never"
+            }
+        )
+    }
+    var until by remember { mutableStateOf(initialUntil ?: today.plusMonths(1)) }
+    var count by remember { mutableStateOf(initialCount ?: 10) }
+    var untilPickerOpen by remember { mutableStateOf(false) }
+
+    PickerSheet("Custom repeat", onDismiss) {
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
+            listOf("Day" to RepeatRule.DAILY, "Week" to RepeatRule.WEEKLY, "Month" to RepeatRule.MONTHLY, "Year" to RepeatRule.YEARLY)
+                .forEach { (label, value) ->
+                    Pill(label, selected = rule == value, accentColor = accent, onClick = { rule = value })
+                }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("Every", color = NColors.textSecondary, fontSize = 15.sp)
+            Spacer(Modifier.width(12.dp))
+            WheelColumn(
+                labels = (1..30).map { it.toString() },
+                initialIndex = interval - 1,
+                ndot = ndot,
+                onSelected = { interval = it + 1 },
+                width = 62.dp,
+                textSize = 22.sp,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                when (rule) {
+                    RepeatRule.DAILY -> if (interval == 1) "day" else "days"
+                    RepeatRule.WEEKLY -> if (interval == 1) "week" else "weeks"
+                    RepeatRule.MONTHLY -> if (interval == 1) "month" else "months"
+                    RepeatRule.YEARLY -> if (interval == 1) "year" else "years"
+                    else -> "weeks"
+                },
+                color = NColors.textSecondary,
+                fontSize = 15.sp,
+            )
+        }
+        if (rule == RepeatRule.WEEKLY) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                CalendarFormats.dowShortLabels(weekStart).forEachIndexed { idx, label ->
+                    val iso = ((weekStart + idx + 6) % 7) + 1
+                    Pill(
+                        text = label,
+                        selected = iso in byDays,
+                        accentColor = accent,
+                        onClick = {
+                            val next = if (iso in byDays) byDays - iso else byDays + iso
+                            byDays = next.ifEmpty { setOf(iso) }
+                        },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
+            listOf("Never", "Until", "After").forEach { label ->
+                Pill(label, selected = endMode == label, accentColor = accent, onClick = { endMode = label })
+            }
+        }
+        if (endMode == "Until") {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                CalendarFormats.fmtDateShort(until),
+                color = NColors.textPrimary,
+                fontFamily = NFonts.Mono,
+                fontSize = 15.sp,
+                modifier = Modifier
+                    .background(NColors.surfaceHi, RoundedCornerShape(9.dp))
+                    .clickable { untilPickerOpen = true }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        } else if (endMode == "After") {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                WheelColumn(
+                    labels = (1..99).map { it.toString() },
+                    initialIndex = count - 1,
+                    ndot = ndot,
+                    onSelected = { count = it + 1 },
+                    width = 68.dp,
+                    textSize = 22.sp,
+                )
+                Spacer(Modifier.width(10.dp))
+                Text("times", color = NColors.textSecondary, fontSize = 15.sp)
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        SheetButtons(
+            accent = accent,
+            confirmLabel = "Set repeat",
+            onDismiss = onDismiss,
+            onConfirm = {
+                onConfirm(
+                    rule,
+                    interval,
+                    if (rule == RepeatRule.WEEKLY) byDays else emptySet(),
+                    if (endMode == "Until") until else null,
+                    if (endMode == "After") count else null,
+                )
+            },
+        )
+    }
+
+    if (untilPickerOpen) {
+        NDatePickerSheet(
+            title = "Repeat until",
+            initial = until,
+            weekStart = weekStart,
+            today = today,
+            accent = accent,
+            onDismiss = { untilPickerOpen = false },
+            onConfirm = { until = it; untilPickerOpen = false },
+        )
+    }
+}
+
 /** A snapping wheel: 5 visible rows, the centered one is selected (reported by index). */
 @Composable
-private fun WheelColumn(
+fun WheelColumn(
     labels: List<String>,
     initialIndex: Int,
     ndot: Boolean,

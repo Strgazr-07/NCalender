@@ -49,7 +49,7 @@ object IcsSyncManager {
         val calId = SubscriptionCalendars.ensureCalendar(context, sub)
             ?: return sub.copy(lastError = "Couldn't create local calendar (grant calendar access)")
         val text = fetch(sub.url)
-        val values = parseToEvents(text)
+        val values = parseEvents(text)
         SubscriptionCalendars.replaceEvents(context, calId, values)
         sub.copy(calendarId = calId, lastSyncEpoch = System.currentTimeMillis(), lastError = null)
     } catch (e: Exception) {
@@ -93,7 +93,7 @@ object IcsSyncManager {
 
     // ---------------- parse + map ----------------
 
-    private fun parseToEvents(icsText: String): List<ContentValues> {
+    fun parseEvents(icsText: String): List<ContentValues> {
         val ical = Biweekly.parse(icsText).first() ?: return emptyList()
         val tzId = TimeZone.getDefault().id
         val writeCtx = WriteContext(ICalVersion.V2_0, ical.timezoneInfo, null)

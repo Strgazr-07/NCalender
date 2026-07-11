@@ -10,6 +10,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import com.ncalendar.app.data.DarkBackgroundStyle
 
 /** The Nothing red — the app's single fixed accent. */
 val AccentRed = Color(0xFFD71921)
@@ -74,6 +75,21 @@ private val DarkScheme = NScheme(
     isDark = true,
 )
 
+private val GrayDarkScheme = DarkScheme.copy(
+    bg = Color(0xFF101010),
+    bgElevated = Color(0xFF151515),
+    surface = Color(0xFF1A1A1A),
+    surfaceAlt = Color(0xFF202020),
+    surfaceHi = Color(0xFF262626),
+    surfaceSel = Color(0xFF242424),
+    surfaceSel2 = Color(0xFF2C2C2C),
+    surfaceInset = Color(0xFF363636),
+    border = Color(0xFF303030),
+    borderStrong = Color(0xFF3A3A3A),
+    borderSubtle = Color(0xFF2A2A2A),
+    divider = Color(0xFF242424),
+)
+
 private val LightScheme = NScheme(
     bg = Color(0xFFF6F5F1),
     bgElevated = Color(0xFFEFEEE9),
@@ -113,9 +129,15 @@ val NColors: NScheme
 fun NCalendarTheme(
     dark: Boolean = true,
     accent: Color = AccentRed,
+    darkBackgroundStyle: DarkBackgroundStyle = DarkBackgroundStyle.AMOLED,
     content: @Composable () -> Unit,
 ) {
-    val scheme = if (dark) DarkScheme else LightScheme
+    val base = if (dark) {
+        if (darkBackgroundStyle == DarkBackgroundStyle.GRAY) GrayDarkScheme else DarkScheme
+    } else {
+        LightScheme
+    }
+    val scheme = base.copy(accent = accent, defaultAccent = accent)
     val colorScheme = if (dark) {
         darkColorScheme(background = scheme.bg, surface = scheme.surface, primary = accent, onBackground = scheme.textPrimary, onSurface = scheme.textPrimary)
     } else {

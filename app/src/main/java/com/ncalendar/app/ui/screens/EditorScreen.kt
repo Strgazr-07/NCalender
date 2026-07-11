@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.ncalendar.app.data.CalendarFormats
 import com.ncalendar.app.data.RepeatRule
 import com.ncalendar.app.ui.components.MonoLabel
+import com.ncalendar.app.ui.components.NCustomRecurrenceSheet
 import com.ncalendar.app.ui.components.NDatePickerSheet
 import com.ncalendar.app.ui.components.NReminderPickerSheet
 import com.ncalendar.app.ui.components.NTimePickerSheet
@@ -54,9 +56,11 @@ private enum class PickerField { START_DATE, END_DATE, START_TIME, END_TIME }
 @Composable
 fun EditorScreen(vm: CalendarViewModel) {
     val form = vm.state.form ?: return
+    val events by vm.events.collectAsState()
     val isEditing = vm.state.editId != null
     var picker by remember { mutableStateOf<PickerField?>(null) }
     var remPickerOpen by remember { mutableStateOf(false) }
+    var customRepeatOpen by remember { mutableStateOf(false) }
     // Dismiss the keyboard before opening a wheel sheet — otherwise the IME sits
     // over the picker on tall keyboards (e.g. Nothing Phone 3) and hides it.
     val focus = LocalFocusManager.current
@@ -154,8 +158,37 @@ fun EditorScreen(vm: CalendarViewModel) {
             MonoLabel("Repeat", color = NColors.textFaint, modifier = Modifier.padding(top = 20.dp, bottom = 9.dp))
             FlowRow {
                 RepeatRule.entries.forEach { r ->
-                    Pill(text = r.label, selected = form.repeat == r, onClick = { vm.patchForm { it.copy(repeat = r) } })
+                    Pill(
+                        text = r.label,
+                        selected = form.repeat == r && form.repeatInterval == 1 && form.repeatByDays.isEmpty() &&
+                            form.repeatEndDate == null && form.repeatEndCount == null,
+                        onClick = {
+                            vm.patchForm {
+                                it.copy(
+                                    repeat = r,
+                                    repeatInterval = 1,
+                                    repeatByDays = emptySet(),
+                                    repeatEndDate = null,
+                                    repeatEndCount = null,
+                                )
+                            }
+                        },
+                    )
                 }
+                Pill(text = "Custom...", selected = false, accentColor = vm.accent, onClick = { focus.clearFocus(); customRepeatOpen = true })
+            }
+            if (form.repeat != RepeatRule.NONE) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    CalendarFormats.repeatSummary(form.repeat, form.repeatInterval, form.repeatByDays, form.repeatEndDate, form.repeatEndCount),
+                    color = NColors.textMuted,
+                    fontFamily = NFonts.Mono,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .background(NColors.surfaceAlt, RoundedCornerShape(10.dp))
+                        .clickable { customRepeatOpen = true }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
             }
 
             MonoLabel("Reminders", color = NColors.textFaint, modifier = Modifier.padding(top = 20.dp, bottom = 9.dp))
@@ -212,6 +245,28 @@ fun EditorScreen(vm: CalendarViewModel) {
                 ),
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(90.dp),
             )
+            val conflicts = vm.conflictsFor(events, form)
+            if (conflicts.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                val first = conflicts.first()
+                val extra = if (conflicts.size > 1) " +${conflicts.size - 1} more" else ""
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(vm.accent.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(7.dp).background(vm.accent, CircleShape))
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Overlaps with \"${first.title}\" ${CalendarFormats.timeLabelFor(first)}$extra",
+                        color = NColors.textSecondary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
+                }
+            }
             Spacer(Modifier.height(60.dp))
         }
     }
@@ -257,6 +312,32 @@ fun EditorScreen(vm: CalendarViewModel) {
             onConfirm = { minutes ->
                 vm.patchForm { f -> f.copy(reminders = (f.reminders + minutes).distinct()) }
                 remPickerOpen = false
+            },
+        )
+    }
+    if (customRepeatOpen) {
+        NCustomRecurrenceSheet(
+            initialRule = form.repeat,
+            initialInterval = form.repeatInterval,
+            initialByDays = form.repeatByDays,
+            initialUntil = form.repeatEndDate,
+            initialCount = form.repeatEndCount,
+            weekStart = vm.weekStart,
+            today = vm.today,
+            accent = vm.accent,
+            ndot = vm.ndot,
+            onDismiss = { customRepeatOpen = false },
+            onConfirm = { rule, interval, byDays, until, count ->
+                vm.patchForm {
+                    it.copy(
+                        repeat = rule,
+                        repeatInterval = interval,
+                        repeatByDays = byDays,
+                        repeatEndDate = until,
+                        repeatEndCount = count,
+                    )
+                }
+                customRepeatOpen = false
             },
         )
     }

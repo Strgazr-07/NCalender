@@ -2,6 +2,8 @@ package com.ncalendar.app.ui.screens
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -29,16 +31,25 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ncalendar.app.data.CalendarFormats
+import com.ncalendar.app.data.DarkBackgroundStyle
+import com.ncalendar.app.data.Prefs
+import com.ncalendar.app.data.ThemeMode
+import com.ncalendar.app.data.ics.IcsExportManager
 import com.ncalendar.app.ui.components.Dot
 import com.ncalendar.app.ui.components.MonoLabel
+import com.ncalendar.app.ui.components.NReminderPickerSheet
 import com.ncalendar.app.ui.components.RoundIconButton
 import com.ncalendar.app.ui.theme.NColors
 import com.ncalendar.app.ui.theme.NFonts
@@ -49,6 +60,10 @@ import com.ncalendar.app.viewmodel.Screen
 fun SettingsScreen(vm: CalendarViewModel) {
     val context = LocalContext.current
     val events by vm.events.collectAsState()
+    var defaultReminderPickerOpen by remember { mutableStateOf(false) }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { vm.importIcs(it, vm.defaultCalendarId()) }
+    }
 
     Column(Modifier.fillMaxSize().background(NColors.bg).statusBarsPadding()) {
         Column(Modifier.padding(top = 12.dp, start = ScreenPad, end = ScreenPad, bottom = 8.dp)) {
@@ -68,10 +83,19 @@ fun SettingsScreen(vm: CalendarViewModel) {
             SettingsCard {
                 TabsRow(
                     title = "Theme",
-                    options = listOf("Dark" to true, "Light" to false),
-                    selected = vm.darkTheme,
-                    onSelect = { vm.updateDarkTheme(it) },
+                    options = listOf("System" to ThemeMode.SYSTEM, "Dark" to ThemeMode.DARK, "Light" to ThemeMode.LIGHT),
+                    selected = vm.themeMode,
+                    onSelect = { vm.updateThemeMode(it) },
                 )
+                Divider()
+                TabsRow(
+                    title = "Dark background",
+                    options = listOf("AMOLED" to DarkBackgroundStyle.AMOLED, "Gray" to DarkBackgroundStyle.GRAY),
+                    selected = vm.darkBackgroundStyle,
+                    onSelect = { vm.updateDarkBackgroundStyle(it) },
+                )
+                Divider()
+                AccentRow(selected = vm.accent, onSelect = { vm.updateAccent(it) })
                 Divider()
                 ToggleRow(
                     title = "Ndot display",
@@ -94,9 +118,35 @@ fun SettingsScreen(vm: CalendarViewModel) {
                 NavRow("Manage calendars", value = "") { vm.go(Screen.ACCOUNTS) }
             }
 
+            SectionLabel("ICS & subscriptions")
+            SettingsCard {
+                if (vm.usingSystemCalendar) {
+                    NavRow("Import .ics file", value = "") {
+                        importLauncher.launch(arrayOf("text/calendar", "text/*", "application/octet-stream"))
+                    }
+                    Divider()
+                } else {
+                    InfoRow("Import .ics file", "Connect calendar")
+                    Divider()
+                }
+                NavRow("Export calendar", value = "") {
+                    IcsExportManager.shareEvents(context, vm.visibleEvents(events), "ncalendar-export.ics")
+                }
+            }
+            vm.importMessage?.let { msg ->
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    msg,
+                    color = NColors.textMuted,
+                    fontFamily = NFonts.Mono,
+                    fontSize = 12.sp,
+                    modifier = Modifier.clickable { vm.clearImportMessage() }.padding(horizontal = 4.dp, vertical = 4.dp),
+                )
+            }
+
             // Subscribed .ics / webcal feeds — its own section (renders its own header).
             if (vm.canSubscribe) {
-                Spacer(Modifier.height(26.dp))
+                Spacer(Modifier.height(14.dp))
                 SubscriptionsSection(vm, events)
             }
 
@@ -105,7 +155,7 @@ fun SettingsScreen(vm: CalendarViewModel) {
                 ValueRow(
                     title = "Default reminder",
                     value = CalendarFormats.reminderLabel(vm.defaultReminder).replace(" before", ""),
-                    onClick = { vm.cycleDefaultReminder() },
+                    onClick = { defaultReminderPickerOpen = true },
                 )
                 Divider()
                 NavRow("System notifications", value = "") {
@@ -138,6 +188,18 @@ fun SettingsScreen(vm: CalendarViewModel) {
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
+    }
+
+    if (defaultReminderPickerOpen) {
+        NReminderPickerSheet(
+            accent = vm.accent,
+            ndot = vm.ndot,
+            onDismiss = { defaultReminderPickerOpen = false },
+            onConfirm = {
+                vm.updateDefaultReminder(it)
+                defaultReminderPickerOpen = false
+            },
+        )
     }
 }
 
@@ -182,6 +244,43 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, accent:
             Text(subtitle, color = NColors.textFaint, fontSize = 13.sp)
         }
         AnimatedSwitch(checked = checked, accent = accent)
+    }
+}
+
+private val accentPalette = listOf(
+    "Red" to Prefs.DEFAULT_ACCENT,
+    "Blue" to 0xFF2D7DFF.toInt(),
+    "Green" to 0xFF18A558.toInt(),
+    "Amber" to 0xFFE0A100.toInt(),
+    "Pink" to 0xFFD9488F.toInt(),
+    "White" to 0xFFE8E8E6.toInt(),
+)
+
+@Composable
+private fun AccentRow(selected: Color, onSelect: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Accent color", color = NColors.textPrimary, fontSize = 16.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+            accentPalette.forEach { (_, argb) ->
+                val color = Color(argb)
+                val selectedHere = selected.toArgb() == argb
+                Box(
+                    Modifier
+                        .size(24.dp)
+                        .background(color, CircleShape)
+                        .border(
+                            width = if (selectedHere) 2.dp else 1.dp,
+                            color = if (selectedHere) NColors.textPrimary else NColors.borderStrong,
+                            shape = CircleShape,
+                        )
+                        .clickable { onSelect(argb) },
+                )
+            }
+        }
     }
 }
 

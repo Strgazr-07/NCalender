@@ -101,6 +101,7 @@ class CalendarProvider(private val context: Context) {
                     val rrule = c.getString(7)
                     val desc = c.getString(8)
                     val cal = calendarsById[calId]
+                    val repeat = RepeatRule.parseRRule(rrule)
 
                     val startLdt = if (allDay) {
                         Instant.ofEpochMilli(begin).atZone(ZoneId.of("UTC")).toLocalDate().atStartOfDay()
@@ -130,7 +131,11 @@ class CalendarProvider(private val context: Context) {
                             start = startLdt,
                             end = endLdt,
                             allDay = allDay,
-                            repeat = RepeatRule.fromRRule(rrule),
+                            repeat = repeat.rule,
+                            repeatInterval = repeat.interval,
+                            repeatByDays = repeat.byDays,
+                            repeatEndDate = repeat.until,
+                            repeatEndCount = repeat.count,
                             reminders = reminders,
                             location = location,
                             notes = desc,
@@ -226,6 +231,13 @@ class CalendarProvider(private val context: Context) {
         val id = baseId.toLongOrNull() ?: return false
         val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id)
         return runCatching { context.contentResolver.delete(uri, null, null) }.getOrDefault(0) > 0
+    }
+
+    fun insertRaw(calendarId: String, values: ContentValues): Boolean {
+        if (!hasWritePermission()) return false
+        val id = calendarId.toLongOrNull() ?: return false
+        val v = ContentValues(values).apply { put(CalendarContract.Events.CALENDAR_ID, id) }
+        return runCatching { context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, v) }.getOrNull() != null
     }
 
     /** All provider reminder rows, grouped by event id (one query for the whole window). */

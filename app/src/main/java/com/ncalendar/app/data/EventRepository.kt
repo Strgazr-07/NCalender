@@ -5,6 +5,8 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
+import android.net.Uri
+import com.ncalendar.app.data.ics.IcsSyncManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,7 +86,7 @@ class EventRepository private constructor(
     suspend fun save(event: EventItem, calendarId: String): String {
         val baseId = Recurrence.baseId(event.id)
         if (!prefs.localOnly && provider.hasWritePermission() && calendarId.toLongOrNull() != null) {
-            val rrule = event.repeat.toRRule()
+            val rrule = event.repeat.toRRule(event.repeatInterval, event.repeatByDays, event.repeatEndDate, event.repeatEndCount)
             val isNew = baseId.toLongOrNull() == null || baseId.startsWith("n")
             val savedId = if (isNew) {
                 provider.insert(event, calendarId, rrule) ?: baseId
@@ -110,6 +112,17 @@ class EventRepository private constructor(
             dao.deleteById(baseId)
             refresh()
         }
+    }
+
+    suspend fun importIcs(uri: Uri, calendarId: String): Int {
+        if (!usingSystemCalendar || !provider.hasWritePermission()) return 0
+        val text = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            appContext.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
+        }
+        val values = IcsSyncManager.parseEvents(text)
+        val imported = values.count { provider.insertRaw(calendarId, it) }
+        refresh()
+        return imported
     }
 
     companion object {

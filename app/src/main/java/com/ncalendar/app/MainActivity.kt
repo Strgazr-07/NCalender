@@ -3,6 +3,7 @@ package com.ncalendar.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,11 +11,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import com.ncalendar.app.data.ThemeMode
 import com.ncalendar.app.data.Prefs
 import com.ncalendar.app.ui.AppRoot
 import com.ncalendar.app.ui.PermissionPrimingScreen
@@ -31,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     /** Bumped whenever permission state may have changed, so composition re-checks it. */
     private var permVersion by mutableStateOf(0)
+    private var pendingImportUri by mutableStateOf<Uri?>(null)
 
     private val requestCalendarPermission =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -42,14 +46,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleOpenEvent(intent)
+        handleImportIntent(intent)
         setContent {
-            val dark = viewModel.darkTheme
+            val systemDark = isSystemInDarkTheme()
+            val dark = when (viewModel.themeMode) {
+                ThemeMode.SYSTEM -> systemDark
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+            }
             androidx.compose.runtime.SideEffect {
                 val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
                 controller.isAppearanceLightStatusBars = !dark
                 controller.isAppearanceLightNavigationBars = !dark
             }
-            NCalendarTheme(dark = dark, accent = viewModel.accent) {
+            NCalendarTheme(dark = dark, accent = viewModel.accent, darkBackgroundStyle = viewModel.darkBackgroundStyle) {
                 // Priming stays up until access is granted — unless the user opted
                 // for local-only mode, which needs no permission at all.
                 val showPriming = !viewModel.localOnly && (permVersion < 0 || !hasCalendarPermission())
@@ -75,6 +85,12 @@ class MainActivity : ComponentActivity() {
                         },
                     )
                 } else {
+                    androidx.compose.runtime.LaunchedEffect(pendingImportUri) {
+                        pendingImportUri?.let {
+                            viewModel.importIcs(it, viewModel.defaultCalendarId())
+                            pendingImportUri = null
+                        }
+                    }
                     AppRoot(viewModel)
                 }
             }
@@ -84,6 +100,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleOpenEvent(intent)
+        handleImportIntent(intent)
     }
 
     override fun onResume() {
@@ -104,6 +121,20 @@ class MainActivity : ComponentActivity() {
         intent?.getStringExtra(EXTRA_OPEN_EVENT_ID)?.let { id ->
             if (id.isNotBlank()) viewModel.openEvent(id)
         }
+    }
+
+    private fun handleImportIntent(intent: Intent?) {
+        val uri = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= 33) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+            else -> null
+        }
+        if (uri != null) pendingImportUri = uri
     }
 
     private fun hasCalendarPermission(): Boolean =

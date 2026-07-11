@@ -2,6 +2,7 @@ package com.ncalendar.app.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -11,10 +12,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ncalendar.app.data.CalendarInfo
 import com.ncalendar.app.data.Calendars
+import com.ncalendar.app.data.DarkBackgroundStyle
 import com.ncalendar.app.data.EventItem
 import com.ncalendar.app.data.EventRepository
 import com.ncalendar.app.data.Prefs
+import com.ncalendar.app.data.Recurrence
 import com.ncalendar.app.data.RepeatRule
+import com.ncalendar.app.data.ThemeMode
 import com.ncalendar.app.data.ics.IcsSubscription
 import com.ncalendar.app.data.ics.IcsSyncManager
 import com.ncalendar.app.data.ics.IcsSyncWorker
@@ -61,6 +65,12 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var darkTheme by mutableStateOf(prefs.darkTheme)
         private set
+    var themeMode by mutableStateOf(prefs.themeMode)
+        private set
+    var darkBackgroundStyle by mutableStateOf(prefs.darkBackgroundStyle)
+        private set
+    var accent by mutableStateOf(Color(prefs.accentColorArgb))
+        private set
 
     /** Privacy opt-out: never read/write the system (Google) calendars; Room only. */
     var localOnly by mutableStateOf(prefs.localOnly)
@@ -78,6 +88,8 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     var subscriptions by mutableStateOf(prefs.icsSubscriptions)
         private set
     var syncingSubs by mutableStateOf(false)
+        private set
+    var importMessage by mutableStateOf<String?>(null)
         private set
 
     /** Subscriptions need real calendar access — they mirror into a local calendar. */
@@ -119,6 +131,18 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun importIcs(uri: Uri, calendarId: String) {
+        viewModelScope.launch {
+            val n = repo.importIcs(uri, calendarId)
+            importMessage = if (n > 0) "Imported $n events" else "No events imported"
+            AppWidgets.refreshAll(appCtx)
+        }
+    }
+
+    fun clearImportMessage() {
+        importMessage = null
+    }
+
     /** Refresh feeds on open if any are stale (older than an hour), without blocking. */
     private fun maybeAutoSyncSubscriptions() {
         if (!repo.usingSystemCalendar || subscriptions.isEmpty()) return
@@ -131,11 +155,29 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateDarkTheme(dark: Boolean) {
         darkTheme = dark
+        themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT
         prefs.darkTheme = dark
+        prefs.themeMode = themeMode
     }
 
-    /** The app's single fixed accent — Nothing red. */
-    val accent: Color = Color(0xFFD71921)
+    fun updateThemeMode(mode: ThemeMode) {
+        themeMode = mode
+        prefs.themeMode = mode
+        if (mode != ThemeMode.SYSTEM) {
+            darkTheme = mode == ThemeMode.DARK
+            prefs.darkTheme = darkTheme
+        }
+    }
+
+    fun updateDarkBackgroundStyle(style: DarkBackgroundStyle) {
+        darkBackgroundStyle = style
+        prefs.darkBackgroundStyle = style
+    }
+
+    fun updateAccent(argb: Int) {
+        accent = Color(argb)
+        prefs.accentColorArgb = argb
+    }
 
     // Snapshot-backed so any composable that reads it recomposes on toggle.
     private val visibility = mutableStateMapOf<String, Boolean>().apply {
@@ -274,6 +316,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     fun openEvent(id: String) { state = state.copy(selId = id, screen = Screen.DETAIL) }
     fun closeDetail() { state = state.copy(screen = Screen.APP, selId = null) }
     fun selectDay(day: LocalDate) { state = state.copy(selDay = day) }
+    fun openDayEvents(day: LocalDate = state.selDay) { state = state.copy(selDay = day, anchor = day, screen = Screen.DAY_EVENTS) }
 
     /** True when the system back button has something to pop (otherwise it exits the app). */
     val canGoBack: Boolean
@@ -287,6 +330,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
             s.pickerOpen -> { closePicker(); true }
             s.screen == Screen.EDITOR -> { cancelEdit(); true }
             s.screen == Screen.DETAIL -> { closeDetail(); true }
+            s.screen == Screen.DAY_EVENTS -> { backToApp(); true }
             s.screen == Screen.ACCOUNTS -> { go(Screen.SETTINGS); true }
             s.screen != Screen.APP -> { backToApp(); true }
             else -> false
@@ -340,6 +384,10 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         endDate = day,
         endTime = LocalTime.of(11, 0),
         repeat = RepeatRule.NONE,
+        repeatInterval = 1,
+        repeatByDays = emptySet(),
+        repeatEndDate = null,
+        repeatEndCount = null,
         reminders = listOf(defaultReminder),
         location = "",
         notes = "",
@@ -355,6 +403,10 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         endDate = e.endDate,
         endTime = if (e.allDay) LocalTime.of(11, 0) else e.end.toLocalTime(),
         repeat = e.repeat,
+        repeatInterval = e.repeatInterval,
+        repeatByDays = e.repeatByDays,
+        repeatEndDate = e.repeatEndDate,
+        repeatEndCount = e.repeatEndCount,
         reminders = e.reminders,
         location = e.location ?: "",
         notes = e.notes ?: "",
@@ -362,6 +414,18 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openNewEvent(day: LocalDate = state.selDay) {
         state = state.copy(form = blankForm(day), editId = null, screen = Screen.EDITOR)
+    }
+
+    fun openNewEvent(day: LocalDate, startTime: LocalTime?, endTime: LocalTime?) {
+        val base = blankForm(day)
+        state = state.copy(
+            form = base.copy(
+                startTime = startTime ?: base.startTime,
+                endTime = endTime ?: base.endTime,
+            ),
+            editId = null,
+            screen = Screen.EDITOR,
+        )
     }
 
     fun openEdit(all: List<EventItem>) {
@@ -392,6 +456,10 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
             end = end,
             allDay = f.allDay,
             repeat = f.repeat,
+            repeatInterval = f.repeatInterval,
+            repeatByDays = f.repeatByDays,
+            repeatEndDate = f.repeatEndDate,
+            repeatEndCount = f.repeatEndCount,
             reminders = f.reminders,
             location = f.location.ifBlank { null },
             notes = f.notes.ifBlank { null },
@@ -443,6 +511,27 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         val newEnd = newStart.plusMinutes(durMin.toLong())
         viewModelScope.launch { repo.save(e.copy(start = newStart, end = newEnd), e.calendarId) }
         state = state.copy(drag = null)
+    }
+
+    fun resizeEvent(all: List<EventItem>, id: String, deltaMinutes: Int) {
+        val e = all.find { it.id == id } ?: return
+        val minEnd = e.start.plusMinutes(15)
+        val maxEnd = e.startDate.atStartOfDay().plusDays(1)
+        val newEnd = e.end.plusMinutes(deltaMinutes.toLong()).coerceAtLeast(minEnd).coerceAtMost(maxEnd)
+        viewModelScope.launch { repo.save(e.copy(end = newEnd), e.calendarId) }
+        state = state.copy(drag = null)
+    }
+
+    fun conflictsFor(all: List<EventItem>, form: EventForm): List<EventItem> {
+        if (form.allDay) return emptyList()
+        val start = LocalDateTime.of(form.startDate, form.startTime)
+        val end = LocalDateTime.of(form.endDate, form.endTime)
+        if (!end.isAfter(start)) return emptyList()
+        return visibleEvents(all)
+            .filterNot { it.allDay }
+            .filter { Recurrence.baseId(it.id) != form.id?.let(Recurrence::baseId) }
+            .filter { it.start.isBefore(end) && it.end.isAfter(start) }
+            .sortedBy { it.start }
     }
 
     // ---------------- swipe delete (agenda) + long-press menu ----------------
@@ -520,5 +609,10 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         val next = options[(idx + 1) % options.size]
         defaultReminder = next
         prefs.defaultReminderMinutes = next
+    }
+
+    fun updateDefaultReminder(minutes: Int) {
+        defaultReminder = minutes
+        prefs.defaultReminderMinutes = minutes
     }
 }

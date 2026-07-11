@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import com.ncalendar.app.ui.screens.AppScreen
 import com.ncalendar.app.ui.screens.CalendarsScreen
 import com.ncalendar.app.ui.screens.DetailScreen
+import com.ncalendar.app.ui.screens.DayEventsScreen
 import com.ncalendar.app.ui.screens.EditorScreen
 import com.ncalendar.app.ui.screens.SearchScreen
 import com.ncalendar.app.ui.screens.SettingsScreen
@@ -44,6 +45,7 @@ fun AppRoot(vm: CalendarViewModel) {
             Screen.ACCOUNTS -> CalendarsScreen(vm)
             Screen.SETTINGS -> SettingsScreen(vm)
             Screen.SEARCH -> SearchScreen(vm)
+            Screen.DAY_EVENTS -> DayEventsScreen(vm)
         }
     }
 }

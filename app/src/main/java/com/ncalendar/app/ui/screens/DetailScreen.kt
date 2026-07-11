@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.ncalendar.app.data.CalendarFormats
 import com.ncalendar.app.data.Calendars
 import com.ncalendar.app.data.EventItem
+import com.ncalendar.app.data.ics.IcsExportManager
 import com.ncalendar.app.data.RepeatRule
 import com.ncalendar.app.ui.components.BellGlyph
 import com.ncalendar.app.ui.components.LocationGlyph
@@ -42,6 +44,7 @@ import com.ncalendar.app.viewmodel.CalendarViewModel
 
 @Composable
 fun DetailScreen(vm: CalendarViewModel) {
+    val context = LocalContext.current
     val events by vm.events.collectAsState()
     val e = events.find { it.id == vm.state.selId }
     if (e == null) {
@@ -99,7 +102,11 @@ fun DetailScreen(vm: CalendarViewModel) {
                 DetailRow {
                     RepeatGlyph()
                     Spacer(Modifier.width(16.dp))
-                    Text(e.repeat.label, color = NColors.textSecondary, fontSize = 16.sp)
+                    Text(
+                        CalendarFormats.repeatSummary(e.repeat, e.repeatInterval, e.repeatByDays, e.repeatEndDate, e.repeatEndCount),
+                        color = NColors.textSecondary,
+                        fontSize = 16.sp,
+                    )
                 }
             }
             if (!e.notes.isNullOrBlank()) {
@@ -128,6 +135,17 @@ fun DetailScreen(vm: CalendarViewModel) {
                 contentAlignment = Alignment.Center,
             ) {
                 MonoLabel("Edit", color = NColors.onInverse)
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier
+                    .width(56.dp)
+                    .height(50.dp)
+                    .background(NColors.surfaceAlt, RoundedCornerShape(14.dp))
+                    .clickable { IcsExportManager.shareEvents(context, listOf(e), "ncalendar-event.ics") },
+                contentAlignment = Alignment.Center,
+            ) {
+                MonoLabel("Share", color = NColors.textSecondary, size = 10.sp)
             }
             Spacer(Modifier.width(10.dp))
             Box(

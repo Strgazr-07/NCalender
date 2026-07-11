@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -73,7 +74,7 @@ fun MonthView(vm: CalendarViewModel, events: List<EventItem>) {
 
         // The grid flexes to fill the space above the day-summary card, so the card is
         // always visible without scrolling — the whole point of this redesign.
-        Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.fillMaxWidth().aspectRatio(7f / 6f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             cells.chunked(7).forEach { week ->
                 Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     week.forEach { date ->
@@ -102,9 +103,10 @@ private fun DaySummaryCard(vm: CalendarViewModel, day: LocalDate, events: List<E
     Column(
         Modifier
             .fillMaxWidth()
+            .height(132.dp)
             .background(NColors.surface, RoundedCornerShape(16.dp))
             .border(1.dp, NColors.border, RoundedCornerShape(16.dp))
-            .clickable { vm.openDayView(day) }
+            .clickable { vm.openDayEvents(day) }
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Row(
@@ -128,7 +130,7 @@ private fun DaySummaryCard(vm: CalendarViewModel, day: LocalDate, events: List<E
         }
         if (events.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            events.take(2).forEachIndexed { i, e ->
+            events.take(1).forEachIndexed { i, e ->
                 if (i != 0) Spacer(Modifier.height(11.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(7.dp).background(if (NColors.isDark) e.color else NColors.textMuted, CircleShape))
@@ -144,9 +146,9 @@ private fun DaySummaryCard(vm: CalendarViewModel, day: LocalDate, events: List<E
                     Text(e.title, color = NColors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 }
             }
-            if (events.size > 2) {
+            if (events.size > 1) {
                 Spacer(Modifier.height(11.dp))
-                Text("+${events.size - 2} more", color = NColors.textFaint, fontFamily = NFonts.Mono, fontSize = 12.sp)
+                Text("+${events.size - 1} more", color = NColors.textFaint, fontFamily = NFonts.Mono, fontSize = 12.sp)
             }
         }
     }
@@ -169,7 +171,7 @@ private fun MonthCell(vm: CalendarViewModel, dayEventsAll: List<EventItem>, date
                 // Single tap selects (updates the summary card); double tap opens the day.
                 detectTapGestures(
                     onTap = { vm.selectDay(date) },
-                    onDoubleTap = { vm.openDayView(date) },
+                    onDoubleTap = { vm.openDayEvents(date) },
                 )
             },
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -193,16 +195,14 @@ private fun MonthCell(vm: CalendarViewModel, dayEventsAll: List<EventItem>, date
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             dayEvents.forEach { e ->
                 val dim = !inMonth
-                // Calendar colours (esp. near-white "Personal") disappear on the pale
-                // light background, so light mode uses one monochrome ink; today stays red.
-                val ink = if (NColors.isDark) e.color else NColors.textMuted
+                val ink = if (dim) vm.accent.copy(alpha = 0.35f) else vm.accent
                 if (e.allDay) {
                     Box(
                         Modifier.size(6.dp)
-                            .border(1.5.dp, if (dim) NColors.textGhostDeep else NColors.textMuted, CircleShape),
+                            .border(1.5.dp, ink, CircleShape),
                     )
                 } else {
-                    Dot(if (dim) NColors.textGhostDeep else ink, size = 6.dp)
+                    Dot(ink, size = 6.dp)
                 }
             }
             if (dayEvents.isEmpty()) Spacer(Modifier.size(6.dp))

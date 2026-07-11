@@ -12,35 +12,110 @@ enum class RepeatRule(val label: String) {
     WEEKLY("Weekly"),
     WEEKDAY("Weekdays"),
     MONTHLY("Monthly"),
-    YEARLY("Yearly");
+    YEARLY("Each year");
 
     /** iCal RRULE for the system calendar provider, or null for non-repeating. */
-    fun toRRule(): String? = when (this) {
+    fun toRRule(
+        interval: Int = 1,
+        byDays: Set<Int> = emptySet(),
+        until: LocalDate? = null,
+        count: Int? = null,
+    ): String? = when (this) {
         NONE -> null
-        DAILY -> "FREQ=DAILY"
-        WEEKLY -> "FREQ=WEEKLY"
-        WEEKDAY -> "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
-        MONTHLY -> "FREQ=MONTHLY"
-        YEARLY -> "FREQ=YEARLY"
+        else -> buildList {
+            add("FREQ=${freqName()}")
+            if (interval > 1) add("INTERVAL=${interval.coerceAtLeast(1)}")
+            val days = when {
+                this@RepeatRule == WEEKDAY -> setOf(1, 2, 3, 4, 5)
+                byDays.isNotEmpty() -> byDays
+                else -> emptySet()
+            }
+            if (days.isNotEmpty()) add("BYDAY=${days.sorted().joinToString(",") { isoDayToRRule(it) }}")
+            until?.let { add("UNTIL=${it.year}${pad2(it.monthValue)}${pad2(it.dayOfMonth)}T235959Z") }
+            count?.takeIf { it > 0 }?.let { add("COUNT=$it") }
+        }.joinToString(";")
+    }
+
+    private fun freqName(): String = when (this) {
+        NONE -> ""
+        DAILY -> "DAILY"
+        WEEKLY, WEEKDAY -> "WEEKLY"
+        MONTHLY -> "MONTHLY"
+        YEARLY -> "YEARLY"
     }
 
     companion object {
         fun fromStorage(s: String?): RepeatRule =
             entries.firstOrNull { it.name.equals(s, ignoreCase = true) } ?: NONE
 
-        fun fromRRule(rrule: String?): RepeatRule {
-            if (rrule.isNullOrBlank()) return NONE
-            val r = rrule.uppercase()
-            return when {
-                r.contains("FREQ=DAILY") -> DAILY
-                r.contains("FREQ=MONTHLY") -> MONTHLY
-                r.contains("FREQ=YEARLY") -> YEARLY
-                r.contains("FREQ=WEEKLY") && r.contains("BYDAY=MO,TU,WE,TH,FR") -> WEEKDAY
-                r.contains("FREQ=WEEKLY") -> WEEKLY
+        fun fromRRule(rrule: String?): RepeatRule = parseRRule(rrule).rule
+
+        fun parseRRule(rrule: String?): RepeatConfig {
+            if (rrule.isNullOrBlank()) return RepeatConfig()
+            val parts = rrule.split(';')
+                .mapNotNull {
+                    val idx = it.indexOf('=')
+                    if (idx <= 0) null else it.substring(0, idx).uppercase() to it.substring(idx + 1)
+                }
+                .toMap()
+            val byDays = parts["BYDAY"].orEmpty()
+                .split(',')
+                .mapNotNull { rRuleDayToIso(it.takeLast(2).uppercase()) }
+                .toSet()
+            val freq = parts["FREQ"]?.uppercase()
+            val rule = when (freq) {
+                "DAILY" -> DAILY
+                "MONTHLY" -> MONTHLY
+                "YEARLY" -> YEARLY
+                "WEEKLY" -> if (byDays == setOf(1, 2, 3, 4, 5)) WEEKDAY else WEEKLY
                 else -> WEEKLY
             }
+            val until = parts["UNTIL"]?.take(8)?.let { raw ->
+                runCatching {
+                    LocalDate.of(raw.substring(0, 4).toInt(), raw.substring(4, 6).toInt(), raw.substring(6, 8).toInt())
+                }.getOrNull()
+            }
+            return RepeatConfig(
+                rule = rule,
+                interval = parts["INTERVAL"]?.toIntOrNull()?.coerceAtLeast(1) ?: 1,
+                byDays = if (rule == WEEKDAY) emptySet() else byDays,
+                until = until,
+                count = parts["COUNT"]?.toIntOrNull()?.takeIf { it > 0 },
+            )
         }
     }
+}
+
+data class RepeatConfig(
+    val rule: RepeatRule = RepeatRule.NONE,
+    val interval: Int = 1,
+    val byDays: Set<Int> = emptySet(),
+    val until: LocalDate? = null,
+    val count: Int? = null,
+)
+
+private fun pad2(n: Int): String = n.toString().padStart(2, '0')
+
+fun isoDayToRRule(day: Int): String = when (day) {
+    1 -> "MO"
+    2 -> "TU"
+    3 -> "WE"
+    4 -> "TH"
+    5 -> "FR"
+    6 -> "SA"
+    7 -> "SU"
+    else -> "MO"
+}
+
+fun rRuleDayToIso(day: String): Int? = when (day.uppercase()) {
+    "MO" -> 1
+    "TU" -> 2
+    "WE" -> 3
+    "TH" -> 4
+    "FR" -> 5
+    "SA" -> 6
+    "SU" -> 7
+    else -> null
 }
 
 /**
@@ -76,6 +151,10 @@ data class EventItem(
     val end: LocalDateTime,
     val allDay: Boolean = false,
     val repeat: RepeatRule = RepeatRule.NONE,
+    val repeatInterval: Int = 1,
+    val repeatByDays: Set<Int> = emptySet(),
+    val repeatEndDate: LocalDate? = null,
+    val repeatEndCount: Int? = null,
     val reminders: List<Int> = emptyList(),
     val location: String? = null,
     val notes: String? = null,
@@ -149,6 +228,37 @@ object CalendarFormats {
             val d = m / 1440
             "$d day${if (d == 1) "" else "s"} before"
         }
+    }
+
+    fun repeatSummary(
+        rule: RepeatRule,
+        interval: Int,
+        byDays: Set<Int>,
+        until: LocalDate?,
+        count: Int?,
+    ): String {
+        if (rule == RepeatRule.NONE) return RepeatRule.NONE.label
+        val every = interval.coerceAtLeast(1)
+        val unit = when (rule) {
+            RepeatRule.DAILY -> "day"
+            RepeatRule.WEEKLY, RepeatRule.WEEKDAY -> "week"
+            RepeatRule.MONTHLY -> "month"
+            RepeatRule.YEARLY -> "year"
+            RepeatRule.NONE -> "day"
+        }
+        val base = if (every == 1) rule.label else "Every $every ${unit}s"
+        val days = when {
+            rule == RepeatRule.WEEKDAY -> " on weekdays"
+            rule == RepeatRule.WEEKLY && byDays.isNotEmpty() ->
+                " on " + byDays.sorted().joinToString(", ") { DOW[(it % 7)].lowercase().replaceFirstChar(Char::uppercase) }
+            else -> ""
+        }
+        val end = when {
+            until != null -> " · until ${fmtDateShort(until)}"
+            count != null -> " · $count times"
+            else -> ""
+        }
+        return "$base$days$end"
     }
 
     private val workRe = Regex(

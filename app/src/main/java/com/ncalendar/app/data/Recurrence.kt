@@ -19,9 +19,13 @@ object Recurrence {
         val out = ArrayList<EventItem>()
         var d = if (base.startDate.isBefore(windowStart)) windowStart else base.startDate
         var guard = 0
-        while (!d.isAfter(windowEnd) && guard < 1000) {
+        var emitted = 0
+        val lastAllowed = base.repeatEndDate?.let { minOf(it, windowEnd) } ?: windowEnd
+        while (!d.isAfter(lastAllowed) && guard < 2000) {
             guard++
-            if (!d.isBefore(base.startDate) && matches(base.repeat, base.startDate, d)) {
+            if (!d.isBefore(base.startDate) && matches(base.repeat, base.startDate, d, base.repeatInterval, base.repeatByDays)) {
+                emitted++
+                if (base.repeatEndCount == null || emitted <= base.repeatEndCount) {
                 val start = LocalDateTime.of(d, startTime)
                 val isFirst = d == base.startDate
                 out.add(
@@ -32,18 +36,32 @@ object Recurrence {
                         isRecurring = true,
                     )
                 )
+                }
+                if (base.repeatEndCount != null && emitted >= base.repeatEndCount) break
             }
             d = d.plusDays(1)
         }
         return out
     }
 
-    private fun matches(rule: RepeatRule, anchor: LocalDate, day: LocalDate): Boolean = when (rule) {
-        RepeatRule.DAILY -> true
-        RepeatRule.WEEKLY -> day.dayOfWeek == anchor.dayOfWeek
-        RepeatRule.WEEKDAY -> day.dayOfWeek != DayOfWeek.SATURDAY && day.dayOfWeek != DayOfWeek.SUNDAY
-        RepeatRule.MONTHLY -> day.dayOfMonth == anchor.dayOfMonth
-        RepeatRule.YEARLY -> day.dayOfMonth == anchor.dayOfMonth && day.month == anchor.month
+    fun matches(rule: RepeatRule, anchor: LocalDate, day: LocalDate, interval: Int, byDays: Set<Int>): Boolean = when (rule) {
+        RepeatRule.DAILY -> ChronoUnit.DAYS.between(anchor, day) % interval.coerceAtLeast(1) == 0L
+        RepeatRule.WEEKLY -> {
+            val weeks = ChronoUnit.WEEKS.between(anchor.with(DayOfWeek.MONDAY), day.with(DayOfWeek.MONDAY))
+            weeks % interval.coerceAtLeast(1) == 0L && day.dayOfWeek.value in byDays.ifEmpty { setOf(anchor.dayOfWeek.value) }
+        }
+        RepeatRule.WEEKDAY -> {
+            val weeks = ChronoUnit.WEEKS.between(anchor.with(DayOfWeek.MONDAY), day.with(DayOfWeek.MONDAY))
+            weeks % interval.coerceAtLeast(1) == 0L && day.dayOfWeek != DayOfWeek.SATURDAY && day.dayOfWeek != DayOfWeek.SUNDAY
+        }
+        RepeatRule.MONTHLY -> {
+            val months = ChronoUnit.MONTHS.between(anchor.withDayOfMonth(1), day.withDayOfMonth(1))
+            months % interval.coerceAtLeast(1) == 0L && day.dayOfMonth == anchor.dayOfMonth
+        }
+        RepeatRule.YEARLY -> {
+            val years = ChronoUnit.YEARS.between(anchor.withDayOfYear(1), day.withDayOfYear(1))
+            years % interval.coerceAtLeast(1) == 0L && day.dayOfMonth == anchor.dayOfMonth && day.month == anchor.month
+        }
         RepeatRule.NONE -> day == anchor
     }
 }
