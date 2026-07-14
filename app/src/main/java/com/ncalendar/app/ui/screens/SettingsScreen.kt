@@ -120,15 +120,10 @@ fun SettingsScreen(vm: CalendarViewModel) {
 
             SectionLabel("ICS & subscriptions")
             SettingsCard {
-                if (vm.usingSystemCalendar) {
-                    NavRow("Import .ics file", value = "") {
-                        importLauncher.launch(arrayOf("text/calendar", "text/*", "application/octet-stream"))
-                    }
-                    Divider()
-                } else {
-                    InfoRow("Import .ics file", "Connect calendar")
-                    Divider()
+                NavRow("Import .ics file", value = if (vm.usingSystemCalendar) "" else "Offline") {
+                    importLauncher.launch(arrayOf("text/calendar", "text/*", "application/octet-stream"))
                 }
+                Divider()
                 NavRow("Export calendar", value = "") {
                     IcsExportManager.shareEvents(context, vm.visibleEvents(events), "ncalendar-export.ics")
                 }
@@ -148,6 +143,17 @@ fun SettingsScreen(vm: CalendarViewModel) {
             if (vm.canSubscribe) {
                 Spacer(Modifier.height(14.dp))
                 SubscriptionsSection(vm, events)
+            }
+
+            SectionLabel("Privacy")
+            SettingsCard {
+                ToggleRow(
+                    title = "Local-only mode",
+                    subtitle = if (vm.localOnly) "Events stay on this phone" else "Use account calendars on this device",
+                    checked = vm.localOnly,
+                    accent = vm.accent,
+                    onToggle = { vm.updateLocalOnly(!vm.localOnly) },
+                )
             }
 
             SectionLabel("Reminders & notifications")

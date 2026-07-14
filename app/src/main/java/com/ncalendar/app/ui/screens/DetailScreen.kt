@@ -142,6 +142,17 @@ fun DetailScreen(vm: CalendarViewModel) {
                     .width(56.dp)
                     .height(50.dp)
                     .background(NColors.surfaceAlt, RoundedCornerShape(14.dp))
+                    .clickable { vm.dupById(events, e.id) },
+                contentAlignment = Alignment.Center,
+            ) {
+                MonoLabel("Copy", color = NColors.textSecondary, size = 10.sp)
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier
+                    .width(56.dp)
+                    .height(50.dp)
+                    .background(NColors.surfaceAlt, RoundedCornerShape(14.dp))
                     .clickable { IcsExportManager.shareEvents(context, listOf(e), "ncalendar-event.ics") },
                 contentAlignment = Alignment.Center,
             ) {

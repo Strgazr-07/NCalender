@@ -150,6 +150,18 @@ private fun DaySummaryCard(vm: CalendarViewModel, day: LocalDate, events: List<E
                 Spacer(Modifier.height(11.dp))
                 Text("+${events.size - 1} more", color = NColors.textFaint, fontFamily = NFonts.Mono, fontSize = 12.sp)
             }
+        } else {
+            Spacer(Modifier.height(14.dp))
+            Box(
+                Modifier
+                    .height(38.dp)
+                    .background(NColors.surfaceHi, RoundedCornerShape(11.dp))
+                    .clickable { vm.openNewEvent(day) }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                MonoLabel("Add event", color = NColors.textSecondary)
+            }
         }
     }
 }

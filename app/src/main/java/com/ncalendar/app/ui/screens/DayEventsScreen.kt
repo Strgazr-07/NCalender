@@ -68,14 +68,28 @@ fun DayEventsScreen(vm: CalendarViewModel) {
                 .padding(horizontal = ScreenPad),
         ) {
             if (events.isEmpty()) {
-                Box(
+                Column(
                     Modifier
                         .fillMaxWidth()
                         .height(160.dp)
-                        .background(NColors.surface, RoundedCornerShape(18.dp)),
-                    contentAlignment = Alignment.Center,
+                        .background(NColors.surface, RoundedCornerShape(18.dp))
+                        .padding(horizontal = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    Spacer(Modifier.weight(1f))
                     MonoLabel("Nothing scheduled", color = NColors.textFaint)
+                    Spacer(Modifier.height(14.dp))
+                    Box(
+                        Modifier
+                            .height(42.dp)
+                            .background(NColors.inverseBg, RoundedCornerShape(12.dp))
+                            .clickable { vm.openNewEvent(day) }
+                            .padding(horizontal = 18.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        MonoLabel("Add event", color = NColors.onInverse)
+                    }
+                    Spacer(Modifier.weight(1f))
                 }
             } else {
                 events.forEachIndexed { index, event ->

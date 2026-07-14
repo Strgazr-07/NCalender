@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
             NCalendarTheme(dark = dark, accent = viewModel.accent, darkBackgroundStyle = viewModel.darkBackgroundStyle) {
                 // Priming stays up until access is granted — unless the user opted
                 // for local-only mode, which needs no permission at all.
-                val showPriming = !viewModel.localOnly && (permVersion < 0 || !hasCalendarPermission())
+                val showPriming = pendingImportUri == null && !viewModel.localOnly && (permVersion < 0 || !hasCalendarPermission())
                 if (showPriming) {
                     PermissionPrimingScreen(
                         accent = viewModel.accent,
@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     androidx.compose.runtime.LaunchedEffect(pendingImportUri) {
                         pendingImportUri?.let {
+                            if (!hasCalendarPermission()) viewModel.updateLocalOnly(true)
                             viewModel.importIcs(it, viewModel.defaultCalendarId())
                             pendingImportUri = null
                         }

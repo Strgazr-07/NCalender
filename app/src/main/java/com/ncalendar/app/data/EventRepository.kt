@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -115,14 +116,82 @@ class EventRepository private constructor(
     }
 
     suspend fun importIcs(uri: Uri, calendarId: String): Int {
-        if (!usingSystemCalendar || !provider.hasWritePermission()) return 0
         val text = kotlinx.coroutines.withContext(Dispatchers.IO) {
             appContext.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
         }
         val values = IcsSyncManager.parseEvents(text)
-        val imported = values.count { provider.insertRaw(calendarId, it) }
+        val imported = if (usingSystemCalendar && provider.hasWritePermission() && calendarId.toLongOrNull() != null) {
+            values.count { provider.insertRaw(calendarId, it) }
+        } else {
+            val targetCalendar = calendarId.takeIf { it.isNotBlank() } ?: Calendars.PERSONAL.id
+            val events = values.mapIndexedNotNull { index, v -> rawIcsToLocalEvent(v, index, targetCalendar) }
+            events.forEach { dao.upsert(it.toEntity()) }
+            events.size
+        }
         refresh()
         return imported
+    }
+
+    private fun rawIcsToLocalEvent(values: android.content.ContentValues, index: Int, calendarId: String): EventItem? {
+        val title = values.getAsString(CalendarContract.Events.TITLE)?.takeIf { it.isNotBlank() } ?: "(No title)"
+        val allDay = values.getAsInteger(CalendarContract.Events.ALL_DAY) == 1
+        val startMillis = values.getAsLong(CalendarContract.Events.DTSTART) ?: return null
+        val rrule = values.getAsString(CalendarContract.Events.RRULE)
+        val repeat = RepeatRule.parseRRule(rrule)
+        val zone = ZoneId.systemDefault()
+        val start = if (allDay) {
+            Instant.ofEpochMilli(startMillis).atZone(ZoneId.of("UTC")).toLocalDate().atStartOfDay()
+        } else {
+            Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDateTime()
+        }
+        val end = if (allDay) {
+            val endMillis = values.getAsLong(CalendarContract.Events.DTEND)
+            val lastDay = if (endMillis != null) {
+                Instant.ofEpochMilli(endMillis).atZone(ZoneId.of("UTC")).toLocalDate().minusDays(1)
+            } else {
+                start.toLocalDate().plusDays(parseDurationDays(values.getAsString(CalendarContract.Events.DURATION)).toLong() - 1)
+            }
+            maxOf(start.toLocalDate(), lastDay).atStartOfDay()
+        } else {
+            val endMillis = values.getAsLong(CalendarContract.Events.DTEND)
+            if (endMillis != null) {
+                Instant.ofEpochMilli(endMillis).atZone(zone).toLocalDateTime()
+            } else {
+                start.plusSeconds(parseDurationSeconds(values.getAsString(CalendarContract.Events.DURATION)).coerceAtLeast(3600))
+            }
+        }
+        return EventItem(
+            id = "ics${System.currentTimeMillis()}_$index",
+            title = title,
+            calendarId = calendarId.takeIf { it.isNotBlank() } ?: Calendars.PERSONAL.id,
+            start = start,
+            end = end,
+            allDay = allDay,
+            repeat = repeat.rule,
+            repeatInterval = repeat.interval,
+            repeatByDays = repeat.byDays,
+            repeatEndDate = repeat.until,
+            repeatEndCount = repeat.count,
+            location = values.getAsString(CalendarContract.Events.EVENT_LOCATION)?.takeIf { it.isNotBlank() },
+            notes = values.getAsString(CalendarContract.Events.DESCRIPTION)?.takeIf { it.isNotBlank() },
+            color = Calendars.get(calendarId).color,
+            calendarName = Calendars.get(calendarId).name,
+            isRecurring = rrule != null,
+        )
+    }
+
+    private fun parseDurationDays(duration: String?): Int {
+        if (duration.isNullOrBlank()) return 1
+        val match = Regex("P(\\d+)D").find(duration)
+        return match?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+    }
+
+    private fun parseDurationSeconds(duration: String?): Long {
+        if (duration.isNullOrBlank()) return 3600
+        Regex("PT(\\d+)S").find(duration)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { return it }
+        Regex("PT(\\d+)M").find(duration)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { return it * 60 }
+        Regex("PT(\\d+)H").find(duration)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { return it * 3600 }
+        return 3600
     }
 
     companion object {

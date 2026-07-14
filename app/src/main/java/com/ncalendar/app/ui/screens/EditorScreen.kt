@@ -108,6 +108,62 @@ fun EditorScreen(vm: CalendarViewModel) {
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (!isEditing) {
+                Spacer(Modifier.height(12.dp))
+                FlowRow {
+                    Pill(
+                        text = "Smart fill",
+                        selected = false,
+                        accentColor = vm.accent,
+                        onClick = {
+                            val parsed = CalendarFormats.parseQuick(form.title, vm.today)
+                            vm.patchForm {
+                                it.copy(
+                                    title = parsed.title ?: it.title,
+                                    startDate = parsed.date,
+                                    endDate = parsed.date,
+                                    startTime = parsed.startTime ?: it.startTime,
+                                    endTime = parsed.endTime ?: it.endTime,
+                                )
+                            }
+                        },
+                    )
+                    Pill(
+                        text = "Birthday",
+                        selected = false,
+                        accentColor = vm.accent,
+                        onClick = {
+                            vm.patchForm {
+                                it.copy(
+                                    title = it.title.ifBlank { "Birthday" },
+                                    allDay = true,
+                                    endDate = it.startDate,
+                                    repeat = RepeatRule.YEARLY,
+                                    repeatInterval = 1,
+                                    repeatByDays = emptySet(),
+                                    repeatEndDate = null,
+                                    repeatEndCount = null,
+                                    reminders = listOf(1440),
+                                )
+                            }
+                        },
+                    )
+                    Pill(
+                        text = "Meeting",
+                        selected = false,
+                        accentColor = vm.accent,
+                        onClick = {
+                            vm.patchForm {
+                                it.copy(
+                                    title = it.title.ifBlank { "Meeting" },
+                                    allDay = false,
+                                    reminders = listOf(vm.defaultReminder),
+                                )
+                            }
+                        },
+                    )
+                }
+            }
 
             MonoLabel("Calendar", color = NColors.textFaint, modifier = Modifier.padding(top = 16.dp, bottom = 9.dp))
             val calendars by vm.calendars.collectAsState()
