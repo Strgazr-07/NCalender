@@ -5,7 +5,7 @@
     android:targetCellWidth="4"
     android:targetCellHeight="2"
     android:updatePeriodMillis="1800000"
-    android:initialLayout="@layout/widget_image"
+    android:initialLayout="@layout/widget_split"
     android:previewLayout="@layout/widget_preview_split"
     android:description="@string/widget_desc_split"
     android:widgetCategory="home_screen"

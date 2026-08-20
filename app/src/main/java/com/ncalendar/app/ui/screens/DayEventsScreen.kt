@@ -78,17 +78,6 @@ fun DayEventsScreen(vm: CalendarViewModel) {
                 ) {
                     Spacer(Modifier.weight(1f))
                     MonoLabel("Nothing scheduled", color = NColors.textFaint)
-                    Spacer(Modifier.height(14.dp))
-                    Box(
-                        Modifier
-                            .height(42.dp)
-                            .background(NColors.inverseBg, RoundedCornerShape(12.dp))
-                            .clickable { vm.openNewEvent(day) }
-                            .padding(horizontal = 18.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        MonoLabel("Add event", color = NColors.onInverse)
-                    }
                     Spacer(Modifier.weight(1f))
                 }
             } else {

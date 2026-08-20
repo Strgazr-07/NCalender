@@ -6,7 +6,7 @@
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">#8A8A88</item>
+        <item name="android:textColor">@color/widget_preview_text_dim</item>
         <item name="android:textSize">8sp</item>
         <item name="android:fontFamily">@font/ndot55_regular</item>
     </style>
@@ -16,7 +16,7 @@
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">#E8E8E6</item>
+        <item name="android:textColor">@color/widget_preview_text</item>
         <item name="android:textSize">11sp</item>
         <item name="android:fontFamily">@font/ndot55_regular</item>
     </style>

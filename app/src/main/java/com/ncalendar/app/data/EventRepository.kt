@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -31,6 +33,7 @@ class EventRepository private constructor(
     private val appContext = context.applicationContext
     private val provider = CalendarProvider(appContext)
     private val prefs = Prefs(appContext)
+    private val filter = CalendarFilter(prefs)
 
     private val _calendars = MutableStateFlow<List<CalendarInfo>>(Calendars.all)
     val calendars: StateFlow<List<CalendarInfo>> = _calendars
@@ -46,25 +49,71 @@ class EventRepository private constructor(
         override fun onChange(selfChange: Boolean) { refreshAsync() }
     }
 
-    /** Loads events/calendars for a wide window around today. Safe to call repeatedly. */
-    suspend fun refresh(today: LocalDate = LocalDate.now()) {
-        val windowStart = today.minusMonths(6)
-        val windowEnd = today.plusMonths(18)
-        if (usingSystemCalendar) {
-            registerObserver()
-            val cals = provider.queryCalendars()
-            _calendars.value = cals.ifEmpty { Calendars.all }
-            val byId = _calendars.value.associateBy { it.id }
-            val startMillis = windowStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val endMillis = windowEnd.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            _events.value = provider.queryInstances(startMillis, endMillis, byId, prefs.allEventReminders())
-        } else {
-            // Local-only (privacy opt-out) or no permission: events live in the
-            // on-device Room store, never in the system provider.
-            _calendars.value = Calendars.all
-            val base = dao.observeAll().first().map { it.toDomain() }
-            _events.value = base.flatMap { Recurrence.expand(it, windowStart, windowEnd) }
+    private val refreshMutex = Mutex()
+    private var lastRefreshAt = 0L
+    private var lastRefreshDay: LocalDate? = null
+
+    /**
+     * Loads events/calendars for a wide window around today. Safe to call repeatedly — with
+     * six call sites hitting a shared singleton (ViewModel init/resume, the ContentObserver on
+     * ANY account's sync, widgets, ICS sync, boot), an unconditional query would be the
+     * dominant cost in the app at even a few thousand instances. Passive/automatic callers
+     * (the observer, periodic widget refreshes) leave [force] false and get skipped if a
+     * refresh already landed within the last second and a half; anything the user is waiting
+     * on directly (a save, a delete, a filter toggle, a subscription sync) MUST pass
+     * force = true, or the change can appear to silently not take effect.
+     */
+    suspend fun refresh(today: LocalDate = LocalDate.now(), force: Boolean = false) {
+        refreshMutex.withLock {
+            val stale = today != lastRefreshDay || System.currentTimeMillis() - lastRefreshAt >= MIN_REFRESH_INTERVAL_MS
+            if (!force && !stale) return@withLock
+            val windowStart = today.minusMonths(6)
+            val windowEnd = today.plusMonths(18)
+            if (usingSystemCalendar) {
+                registerObserver()
+                val cals = provider.queryCalendars()
+                _calendars.value = cals.ifEmpty { Calendars.all }
+                val byId = _calendars.value.associateBy { it.id }
+                val startMillis = windowStart.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val endMillis = windowEnd.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                // Folded into the same query-level filter as calendar visibility, rather than a
+                // separate in-memory pass — "Show holidays" off is just one more id subtracted
+                // from the CALENDAR_ID IN (...) set, so it gets the same empty-set/covers-
+                // everything fast paths CalendarProvider.queryInstances already has.
+                val holidayIds = if (prefs.showHolidays) emptySet() else _calendars.value.filter { it.isHoliday }.mapTo(HashSet()) { it.id }
+                val visibleIds = filter.visibleIds(_calendars.value) - holidayIds
+                val calDefaults = byId.keys.associateWith { prefs.calendarDefaultReminders(it) }.filterValues { it.isNotEmpty() }
+                _events.value = dedupe(
+                    provider.queryInstances(startMillis, endMillis, byId, prefs.allEventReminders(), visibleIds, calDefaults),
+                )
+            } else {
+                // Local-only (privacy opt-out) or no permission: events live in the
+                // on-device Room store, never in the system provider.
+                _calendars.value = Calendars.all
+                val base = dao.observeAll().first().map { it.toDomain() }
+                    .filter { filter.isCalendarEnabled(Calendars.get(it.calendarId)) }
+                _events.value = base.flatMap { Recurrence.expand(it, windowStart, windowEnd) }
+            }
+            lastRefreshAt = System.currentTimeMillis()
+            lastRefreshDay = today
         }
+    }
+
+    /**
+     * Collapses the same real-world event appearing once per account.
+     *
+     * Anyone signed into two Google accounts gets the Indian/US/whatever holiday calendar
+     * attached to BOTH, so every holiday arrived twice — and the same happens to a meeting
+     * invited to a work and a personal address. Two entries with identical title and identical
+     * start/end are indistinguishable to the reader, so showing both is never useful.
+     *
+     * Deliberately NOT keyed on calendar id: the whole point is to merge across calendars. The
+     * first occurrence wins, which keeps the provider's own ordering (and so the calendar the
+     * user's primary account sees) rather than picking arbitrarily.
+     */
+    private fun dedupe(events: List<EventItem>): List<EventItem> {
+        val seen = HashSet<String>(events.size)
+        return events.filter { seen.add("${it.title.trim().lowercase()}|${it.start}|${it.end}|${it.allDay}") }
     }
 
     private val ioScope = CoroutineScope(Dispatchers.IO)
@@ -83,11 +132,50 @@ class EventRepository private constructor(
 
     val writableCalendars: List<CalendarInfo> get() = _calendars.value.filter { it.isWritable }
 
-    /** Create or update. Returns the (possibly new) base id. */
-    suspend fun save(event: EventItem, calendarId: String): String {
+    /**
+     * The recurring SERIES' own start/duration for [instance] (not the instance's own date) —
+     * what the editor must show when the user chose "all events" on a recurring event.
+     * Everything else (title, location, calendar, reminders, ...) is shared across a
+     * well-formed series, so [instance] itself is reused for those fields.
+     */
+    suspend fun seriesBase(instance: EventItem): EventItem? {
+        val baseId = Recurrence.baseId(instance.id)
+        return if (usingSystemCalendar) {
+            val eventId = baseId.toLongOrNull() ?: return null
+            val base = provider.queryEventBase(eventId) ?: return null
+            instance.copy(id = baseId, start = base.start, end = base.start.plusMinutes(base.durationMinutes), allDay = base.allDay)
+        } else {
+            dao.getById(baseId)?.toDomain()
+        }
+    }
+
+    /**
+     * Create or update. [scope] only matters when [event] is an existing recurring instance
+     * (its id carries the "::" instance suffix): ALL_EVENTS writes the whole series (the
+     * default, and the only meaningful scope for a non-recurring or brand-new event);
+     * THIS_EVENT splits just that one occurrence out via a CalendarContract exception (system
+     * calendars) or a standalone replacement + base-series exception date (local-only).
+     * Returns the (possibly new) saved id, or null if a THIS_EVENT split was refused by the
+     * provider (e.g. a read-only calendar) — callers must NOT fall back to editing the whole
+     * series on a null return, that's exactly the bug this scope split exists to prevent.
+     */
+    suspend fun save(event: EventItem, calendarId: String, scope: EditScope = EditScope.ALL_EVENTS): String? {
         val baseId = Recurrence.baseId(event.id)
+        val isRecurringInstance = event.id.contains("::")
         if (!prefs.localOnly && provider.hasWritePermission() && calendarId.toLongOrNull() != null) {
-            val rrule = event.repeat.toRRule(event.repeatInterval, event.repeatByDays, event.repeatEndDate, event.repeatEndCount)
+            if (scope == EditScope.THIS_EVENT && isRecurringInstance) {
+                val baseEventId = baseId.toLongOrNull() ?: return null
+                val originalInstanceMillis = event.id.substringAfter("::").toLongOrNull() ?: return null
+                val newId = provider.insertExceptionEdit(baseEventId, originalInstanceMillis, event, calendarId) ?: return null
+                val idStr = newId.toString()
+                prefs.setEventReminders(idStr, event.reminders)
+                refresh(force = true)
+                return idStr
+            }
+            val rrule = RRule.of(
+                event.repeat, event.repeatInterval, event.repeatByDays,
+                event.repeatEndDate, event.repeatEndCount, event.allDay,
+            )
             val isNew = baseId.toLongOrNull() == null || baseId.startsWith("n")
             val savedId = if (isNew) {
                 provider.insert(event, calendarId, rrule) ?: baseId
@@ -96,22 +184,90 @@ class EventRepository private constructor(
             }
             // Reminders live app-side so NCalendar is the only notifier for them.
             if (savedId.toLongOrNull() != null) prefs.setEventReminders(savedId, event.reminders)
+            // Explicit refresh rather than waiting on the ContentObserver: callers that need to
+            // resolve the saved id back to a fresh instance (see CalendarViewModel.saveEvent)
+            // would otherwise race the async observer.
+            refresh(force = true)
             return savedId
         }
+        if (scope == EditScope.THIS_EVENT && isRecurringInstance) {
+            val originalDate = Recurrence.instanceDate(event.id)
+            if (originalDate != null) {
+                dao.getById(baseId)?.let { base ->
+                    dao.upsert(base.copy(repeatExceptionDates = base.repeatExceptionDates + originalDate))
+                }
+            }
+            val newId = "n${System.currentTimeMillis()}"
+            dao.upsert(
+                event.copy(id = newId, calendarId = calendarId, repeat = RepeatRule.NONE, repeatExceptionDates = emptySet(), isRecurring = false)
+                    .toEntity()
+            )
+            refresh(force = true)
+            return newId
+        }
         dao.upsert(event.copy(id = baseId, calendarId = calendarId).toEntity())
-        refresh()
+        refresh(force = true)
         return baseId
     }
 
-    suspend fun delete(id: String) {
+    /**
+     * Sets app-managed reminders for [id] WITHOUT touching the event itself — the path for
+     * setting a reminder on an event from a read-only calendar (a synced Birthdays or Holidays
+     * calendar, most commonly), where [save]'s normal write path isn't available because the
+     * provider will just silently reject the update.
+     */
+    suspend fun setReminders(id: String, minutes: List<Int>) {
         val baseId = Recurrence.baseId(id)
+        prefs.setEventReminders(baseId, minutes)
+        if (prefs.syncRemindersToProvider) {
+            baseId.toLongOrNull()?.let { provider.writeReminders(it, minutes) }
+        }
+        refresh(force = true)
+    }
+
+    /**
+     * Applies (or undoes) provider-side reminder mirroring across every event that already has
+     * app-side reminders. Without this, flipping the Settings toggle would only affect events
+     * edited afterwards, which reads as the setting silently not working.
+     */
+    suspend fun applyProviderReminderSync(enabled: Boolean) {
+        if (!provider.hasWritePermission()) return
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            prefs.allEventReminders().forEach { (eventId, minutes) ->
+                val id = eventId.toLongOrNull() ?: return@forEach
+                if (enabled) provider.writeReminders(id, minutes) else provider.clearProviderReminders(id)
+            }
+        }
+        refresh(force = true)
+    }
+
+    suspend fun delete(id: String, scope: EditScope = EditScope.ALL_EVENTS) {
+        val baseId = Recurrence.baseId(id)
+        val isRecurringInstance = id.contains("::")
         if (!prefs.localOnly && provider.hasWritePermission() && baseId.toLongOrNull() != null) {
+            if (scope == EditScope.THIS_EVENT && isRecurringInstance) {
+                val baseEventId = baseId.toLongOrNull() ?: return
+                val originalInstanceMillis = id.substringAfter("::").toLongOrNull() ?: return
+                provider.insertExceptionCancel(baseEventId, originalInstanceMillis)
+                refresh(force = true)
+                return
+            }
             provider.delete(baseId)
             prefs.clearEventReminders(baseId)
-            refresh()
+            refresh(force = true)
         } else {
+            if (scope == EditScope.THIS_EVENT && isRecurringInstance) {
+                val originalDate = Recurrence.instanceDate(id)
+                if (originalDate != null) {
+                    dao.getById(baseId)?.let { base ->
+                        dao.upsert(base.copy(repeatExceptionDates = base.repeatExceptionDates + originalDate))
+                    }
+                }
+                refresh(force = true)
+                return
+            }
             dao.deleteById(baseId)
-            refresh()
+            refresh(force = true)
         }
     }
 
@@ -128,7 +284,7 @@ class EventRepository private constructor(
             events.forEach { dao.upsert(it.toEntity()) }
             events.size
         }
-        refresh()
+        refresh(force = true)
         return imported
     }
 
@@ -195,6 +351,8 @@ class EventRepository private constructor(
     }
 
     companion object {
+        private const val MIN_REFRESH_INTERVAL_MS = 1_500L
+
         @Volatile private var instance: EventRepository? = null
         fun get(context: Context): EventRepository = instance ?: synchronized(this) {
             instance ?: EventRepository(context, NCalendarDatabase.get(context).eventDao()).also { instance = it }

@@ -16,13 +16,13 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:theme="@android:style/Theme.Black.NoTitleBar"
+        android:theme="@style/Theme.NCalendar"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.Black.NoTitleBar"
+            android:theme="@style/Theme.NCalendar"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -55,6 +55,11 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.ncalendar.app.ACTION_REMIND" />
+                <action android:name="com.ncalendar.app.ACTION_SNOOZE" />
+                <action android:name="com.ncalendar.app.ACTION_DAILY_SYNC" />
+                <action android:name="com.ncalendar.app.ACTION_LIVE_START" />
+                <action android:name="com.ncalendar.app.ACTION_LIVE_END" />
+                <action android:name="com.ncalendar.app.ACTION_LIVE_DISMISS" />
             </intent-filter>
         </receiver>
 
@@ -64,6 +69,24 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".widget.DateChangeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".widget.WidgetTickReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.ncalendar.app.ACTION_WIDGET_TICK" />
             </intent-filter>
         </receiver>
 
@@ -127,11 +150,6 @@
                 android:resource="@xml/widget_upcoming" />
         </receiver>
 
-        <service
-            android:name=".widget.UpcomingRemoteViewsService"
-            android:permission="android.permission.BIND_REMOTEVIEWS"
-            android:exported="false" />
-
         <receiver
             android:name=".widget.SplitWidget"
             android:exported="false"
@@ -143,5 +161,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_split" />
         </receiver>
+
+        <!-- One service for every collection-backed widget; which collection it serves is
+             chosen by the adapter intent's Uri scheme. See WidgetCollectionService for why
+             this is deliberately not one service class per collection. -->
+        <service
+            android:name=".widget.WidgetCollectionService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
     </application>
 </manifest>

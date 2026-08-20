@@ -20,6 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +38,7 @@ import com.ncalendar.app.data.RepeatRule
 import com.ncalendar.app.ui.components.BellGlyph
 import com.ncalendar.app.ui.components.LocationGlyph
 import com.ncalendar.app.ui.components.MonoLabel
+import com.ncalendar.app.ui.components.NReminderPickerSheet
 import com.ncalendar.app.ui.components.RepeatGlyph
 import com.ncalendar.app.ui.components.RoundIconButton
 import com.ncalendar.app.ui.components.TrashGlyph
@@ -46,11 +50,17 @@ import com.ncalendar.app.viewmodel.CalendarViewModel
 fun DetailScreen(vm: CalendarViewModel) {
     val context = LocalContext.current
     val events by vm.events.collectAsState()
+    val calendars by vm.calendars.collectAsState()
     val e = events.find { it.id == vm.state.selId }
     if (e == null) {
         vm.closeDetail()
         return
     }
+    // Events on a read-only calendar (a synced Birthdays or Holidays feed) can't be edited at
+    // all, so the normal editor route to setting a reminder is unavailable — they get a
+    // dedicated app-side reminder action instead.
+    val readOnly = calendars.firstOrNull { it.id == e.calendarId }?.isWritable == false
+    var reminderSheetOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(NColors.bg).statusBarsPadding()) {
         Box(
             Modifier
@@ -131,10 +141,10 @@ fun DetailScreen(vm: CalendarViewModel) {
                     .weight(1f)
                     .height(50.dp)
                     .background(NColors.inverseBg, RoundedCornerShape(14.dp))
-                    .clickable { vm.openEdit(events) },
+                    .clickable { if (readOnly) reminderSheetOpen = true else vm.openEdit(events) },
                 contentAlignment = Alignment.Center,
             ) {
-                MonoLabel("Edit", color = NColors.onInverse)
+                MonoLabel(if (readOnly) "Remind me" else "Edit", color = NColors.onInverse)
             }
             Spacer(Modifier.width(10.dp))
             Box(
@@ -158,18 +168,38 @@ fun DetailScreen(vm: CalendarViewModel) {
             ) {
                 MonoLabel("Share", color = NColors.textSecondary, size = 10.sp)
             }
-            Spacer(Modifier.width(10.dp))
-            Box(
-                Modifier
-                    .width(56.dp)
-                    .height(50.dp)
-                    .background(NColors.surfaceAlt, RoundedCornerShape(14.dp))
-                    .clickable { vm.deleteEvent() },
-                contentAlignment = Alignment.Center,
-            ) {
-                TrashGlyph(vm.accent)
+            if (!readOnly) {
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    Modifier
+                        .width(56.dp)
+                        .height(50.dp)
+                        .background(NColors.surfaceAlt, RoundedCornerShape(14.dp))
+                        .clickable { vm.deleteEvent() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    TrashGlyph(vm.accent)
+                }
             }
         }
+    }
+
+    if (reminderSheetOpen) {
+        NReminderPickerSheet(
+            accent = vm.accent,
+            ndot = vm.ndot,
+            onDismiss = { reminderSheetOpen = false },
+            onConfirm = { minutes ->
+                vm.setEventReminders(e.id, listOf(minutes))
+                reminderSheetOpen = false
+            },
+            title = "Remind me about this",
+            confirmLabel = "Set reminder",
+            onClear = {
+                vm.setEventReminders(e.id, emptyList())
+                reminderSheetOpen = false
+            },
+        )
     }
 }
 

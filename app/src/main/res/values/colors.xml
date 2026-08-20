@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Light values; the -night variant mirrors them. These drive the window background and the
+  widget PICKER PREVIEWS (res/layout/widget_preview_*.xml), which are inflated by the launcher
+  and so follow the system theme rather than the app's own theme setting. The live widgets are
+  bitmap-rendered and get their colors from WidgetPalette instead, which does honor the app
+  setting — that difference is deliberate, not an oversight.
+-->
+<resources>
+    <color name="window_background">#F6F5F1</color>
+
+    <color name="widget_preview_bg">#EFEEE9</color>
+    <color name="widget_preview_border">#CBCAC1</color>
+    <color name="widget_preview_text">#15150F</color>
+    <color name="widget_preview_text_secondary">#3A3A34</color>
+    <color name="widget_preview_text_dim">#6E6E68</color>
+    <color name="widget_preview_accent">#D71921</color>
+    <color name="widget_preview_on_accent">#FFFFFF</color>
+</resources>

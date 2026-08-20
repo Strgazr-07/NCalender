@@ -5,7 +5,7 @@
     android:targetCellWidth="3"
     android:targetCellHeight="3"
     android:updatePeriodMillis="1800000"
-    android:initialLayout="@layout/widget_image"
+    android:initialLayout="@layout/widget_mini_month"
     android:previewLayout="@layout/widget_preview_mini_month"
     android:description="@string/widget_desc_mini_month"
     android:widgetCategory="home_screen"

@@ -23,8 +23,8 @@ android {
         applicationId = "com.ncalendar.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "2.0.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -93,6 +93,11 @@ dependencies {
     // them in the background.
     implementation("net.sf.biweekly:biweekly:0.6.8")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    // Pure-JVM unit tests over the extracted data/-layer logic (no Robolectric needed —
+    // see app/src/test). Covers the timezone/recurrence/reminder correctness fixes.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.google.truth:truth:1.4.4")
 }
 
 composeCompiler {

@@ -25,7 +25,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Design review"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/widget_preview_text"
                 android:textSize="14sp"
                 android:maxLines="1"
                 android:fontFamily="@font/ntype82_regular" />
@@ -34,7 +34,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="Today · 09:00 – 10:00"
-                android:textColor="#C8C8C6"
+                android:textColor="@color/widget_preview_text_secondary"
                 android:textSize="11sp"
                 android:fontFamily="@font/ndot55_regular" />
         </LinearLayout>
@@ -45,7 +45,7 @@
         android:layout_height="1dp"
         android:layout_marginTop="12dp"
         android:layout_marginBottom="12dp"
-        android:background="#2A2A28"
+        android:background="@color/widget_preview_border"
         android:importantForAccessibility="no" />
 
     <LinearLayout
@@ -67,7 +67,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Dentist"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/widget_preview_text"
                 android:textSize="14sp"
                 android:maxLines="1"
                 android:fontFamily="@font/ntype82_regular" />
@@ -76,7 +76,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="Tomorrow · 11:00 – 11:30"
-                android:textColor="#C8C8C6"
+                android:textColor="@color/widget_preview_text_secondary"
                 android:textSize="11sp"
                 android:fontFamily="@font/ndot55_regular" />
         </LinearLayout>

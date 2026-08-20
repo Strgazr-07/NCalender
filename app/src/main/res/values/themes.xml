@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The window theme behind Compose. Previously hardcoded to @android:style/Theme.Black,
+      which meant a black window background and a black cold-start flash even when the app
+      itself resolved to the light theme. The -night variant supplies the dark values.
+
+      System bars are transparent so MainActivity's enableEdgeToEdge() + insets controller own
+      their appearance — setting bar colors here would fight it.
+    -->
+    <style name="Theme.NCalendar" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+</resources>

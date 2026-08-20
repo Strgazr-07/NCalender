@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleOpenEvent(intent)
+        handleOpenDate(intent)
         handleImportIntent(intent)
         setContent {
             val systemDark = isSystemInDarkTheme()
@@ -58,6 +59,12 @@ class MainActivity : ComponentActivity() {
                 val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
                 controller.isAppearanceLightStatusBars = !dark
                 controller.isAppearanceLightNavigationBars = !dark
+            }
+            // Picks up a SYSTEM-theme flip (which no manifest receiver can observe on API 26+,
+            // since CONFIGURATION_CHANGED is implicit-broadcast restricted) so widgets repaint
+            // alongside the app rather than lagging until their next periodic tick.
+            androidx.compose.runtime.LaunchedEffect(dark) {
+                com.ncalendar.app.widget.AppWidgets.refreshAll(applicationContext)
             }
             NCalendarTheme(dark = dark, accent = viewModel.accent, darkBackgroundStyle = viewModel.darkBackgroundStyle) {
                 // Priming stays up until access is granted — unless the user opted
@@ -101,6 +108,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleOpenEvent(intent)
+        handleOpenDate(intent)
         handleImportIntent(intent)
     }
 
@@ -121,6 +129,14 @@ class MainActivity : ComponentActivity() {
     private fun handleOpenEvent(intent: Intent?) {
         intent?.getStringExtra(EXTRA_OPEN_EVENT_ID)?.let { id ->
             if (id.isNotBlank()) viewModel.openEvent(id)
+        }
+    }
+
+    /** Tapping a date cell in the interactive month-grid widgets lands here — opens that
+     *  day's event list directly rather than just the app in general. */
+    private fun handleOpenDate(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_OPEN_DATE)?.let { iso ->
+            runCatching { java.time.LocalDate.parse(iso) }.getOrNull()?.let { viewModel.openDayEvents(it) }
         }
     }
 
@@ -156,5 +172,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN_EVENT_ID = "open_event_id"
+        /** ISO-8601 date string (LocalDate.toString() format) — see handleOpenDate. */
+        const val EXTRA_OPEN_DATE = "open_date"
     }
 }

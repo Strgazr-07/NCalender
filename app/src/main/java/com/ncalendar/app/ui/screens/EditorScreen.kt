@@ -78,7 +78,14 @@ fun EditorScreen(vm: CalendarViewModel) {
                 modifier = Modifier.clickable { vm.cancelEdit() }.padding(vertical = 4.dp),
             )
             Spacer(Modifier.weight(1f))
-            MonoLabel(if (isEditing) "Edit event" else "New event", color = NColors.textSecondary, size = NType.LabelBig)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                MonoLabel(if (isEditing) "Edit event" else "New event", color = NColors.textSecondary, size = NType.LabelBig)
+                // Surfaces which part of the series this save will touch — otherwise it's easy
+                // to forget which choice was made on the scope sheet a moment ago.
+                if (form.scope == com.ncalendar.app.data.EditScope.THIS_EVENT) {
+                    MonoLabel("This event only", color = vm.accent, size = 10.sp)
+                }
+            }
             Spacer(Modifier.weight(1f))
             MonoLabel(
                 "Save", color = vm.accent, size = NType.LabelBig,
@@ -211,40 +218,45 @@ fun EditorScreen(vm: CalendarViewModel) {
                 onTimeClick = { focus.clearFocus(); picker = PickerField.END_TIME },
             )
 
-            MonoLabel("Repeat", color = NColors.textFaint, modifier = Modifier.padding(top = 20.dp, bottom = 9.dp))
-            FlowRow {
-                RepeatRule.entries.forEach { r ->
-                    Pill(
-                        text = r.label,
-                        selected = form.repeat == r && form.repeatInterval == 1 && form.repeatByDays.isEmpty() &&
-                            form.repeatEndDate == null && form.repeatEndCount == null,
-                        onClick = {
-                            vm.patchForm {
-                                it.copy(
-                                    repeat = r,
-                                    repeatInterval = 1,
-                                    repeatByDays = emptySet(),
-                                    repeatEndDate = null,
-                                    repeatEndCount = null,
-                                )
-                            }
-                        },
+            // A single split-out occurrence can't carry its own repeat rule — saveEvent()
+            // always forces it to NONE for a THIS_EVENT scope, so showing (and letting the
+            // user fiddle with) the series' rule here would be actively misleading.
+            if (form.scope != com.ncalendar.app.data.EditScope.THIS_EVENT) {
+                MonoLabel("Repeat", color = NColors.textFaint, modifier = Modifier.padding(top = 20.dp, bottom = 9.dp))
+                FlowRow {
+                    RepeatRule.entries.forEach { r ->
+                        Pill(
+                            text = r.label,
+                            selected = form.repeat == r && form.repeatInterval == 1 && form.repeatByDays.isEmpty() &&
+                                form.repeatEndDate == null && form.repeatEndCount == null,
+                            onClick = {
+                                vm.patchForm {
+                                    it.copy(
+                                        repeat = r,
+                                        repeatInterval = 1,
+                                        repeatByDays = emptySet(),
+                                        repeatEndDate = null,
+                                        repeatEndCount = null,
+                                    )
+                                }
+                            },
+                        )
+                    }
+                    Pill(text = "Custom...", selected = false, accentColor = vm.accent, onClick = { focus.clearFocus(); customRepeatOpen = true })
+                }
+                if (form.repeat != RepeatRule.NONE) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        CalendarFormats.repeatSummary(form.repeat, form.repeatInterval, form.repeatByDays, form.repeatEndDate, form.repeatEndCount),
+                        color = NColors.textMuted,
+                        fontFamily = NFonts.Mono,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .background(NColors.surfaceAlt, RoundedCornerShape(10.dp))
+                            .clickable { customRepeatOpen = true }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }
-                Pill(text = "Custom...", selected = false, accentColor = vm.accent, onClick = { focus.clearFocus(); customRepeatOpen = true })
-            }
-            if (form.repeat != RepeatRule.NONE) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    CalendarFormats.repeatSummary(form.repeat, form.repeatInterval, form.repeatByDays, form.repeatEndDate, form.repeatEndCount),
-                    color = NColors.textMuted,
-                    fontFamily = NFonts.Mono,
-                    fontSize = 12.sp,
-                    modifier = Modifier
-                        .background(NColors.surfaceAlt, RoundedCornerShape(10.dp))
-                        .clickable { customRepeatOpen = true }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
             }
 
             MonoLabel("Reminders", color = NColors.textFaint, modifier = Modifier.padding(top = 20.dp, bottom = 9.dp))
@@ -342,7 +354,19 @@ fun EditorScreen(vm: CalendarViewModel) {
             title = "End date", initial = form.endDate, weekStart = vm.weekStart,
             today = vm.today, accent = vm.accent,
             onDismiss = { picker = null },
-            onConfirm = { d -> vm.patchForm { it.copy(endDate = d) }; picker = null },
+            onConfirm = { d ->
+                vm.patchForm {
+                    // Mirrors the start-date clamp above: an end date can't land before the
+                    // start date, and if clamping lands both on the same day, push the end
+                    // time forward so the event doesn't silently collapse to zero duration.
+                    val endDate = if (d.isBefore(it.startDate)) it.startDate else d
+                    val endTime = if (endDate == it.startDate && !it.endTime.isAfter(it.startTime)) {
+                        it.startTime.plusMinutes(15)
+                    } else it.endTime
+                    it.copy(endDate = endDate, endTime = endTime)
+                }
+                picker = null
+            },
         )
         PickerField.START_TIME -> NTimePickerSheet(
             title = "Start time", initial = form.startTime, ndot = vm.ndot, accent = vm.accent,
@@ -355,7 +379,16 @@ fun EditorScreen(vm: CalendarViewModel) {
         PickerField.END_TIME -> NTimePickerSheet(
             title = "End time", initial = form.endTime, ndot = vm.ndot, accent = vm.accent,
             onDismiss = { picker = null },
-            onConfirm = { t -> vm.patchForm { it.copy(endTime = t) }; picker = null },
+            onConfirm = { t ->
+                vm.patchForm {
+                    // Same-day end time can't land at or before the start time.
+                    val endTime = if (it.endDate == it.startDate && !t.isAfter(it.startTime)) {
+                        it.startTime.plusMinutes(15)
+                    } else t
+                    it.copy(endTime = endTime)
+                }
+                picker = null
+            },
         )
         null -> {}
     }

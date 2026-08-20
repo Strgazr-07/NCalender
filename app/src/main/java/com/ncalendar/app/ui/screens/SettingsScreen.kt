@@ -50,6 +50,7 @@ import com.ncalendar.app.data.ics.IcsExportManager
 import com.ncalendar.app.ui.components.Dot
 import com.ncalendar.app.ui.components.MonoLabel
 import com.ncalendar.app.ui.components.NReminderPickerSheet
+import com.ncalendar.app.ui.components.NTimePickerSheet
 import com.ncalendar.app.ui.components.RoundIconButton
 import com.ncalendar.app.ui.theme.NColors
 import com.ncalendar.app.ui.theme.NFonts
@@ -61,6 +62,7 @@ fun SettingsScreen(vm: CalendarViewModel) {
     val context = LocalContext.current
     val events by vm.events.collectAsState()
     var defaultReminderPickerOpen by remember { mutableStateOf(false) }
+    var allDayTimePickerOpen by remember { mutableStateOf(false) }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { vm.importIcs(it, vm.defaultCalendarId()) }
     }
@@ -116,6 +118,16 @@ fun SettingsScreen(vm: CalendarViewModel) {
             SectionLabel("Calendars")
             SettingsCard {
                 NavRow("Manage calendars", value = "") { vm.go(Screen.ACCOUNTS) }
+                if (vm.usingSystemCalendar) {
+                    Divider()
+                    ToggleRow(
+                        title = "Show holidays",
+                        subtitle = "Applies to every view and widget",
+                        checked = vm.showHolidays,
+                        accent = vm.accent,
+                        onToggle = { vm.updateShowHolidays(!vm.showHolidays) },
+                    )
+                }
             }
 
             SectionLabel("ICS & subscriptions")
@@ -164,6 +176,32 @@ fun SettingsScreen(vm: CalendarViewModel) {
                     onClick = { defaultReminderPickerOpen = true },
                 )
                 Divider()
+                ValueRow(
+                    title = "All-day reminder time",
+                    value = CalendarFormats.fmtTime(vm.allDayReminderTime),
+                    onClick = { allDayTimePickerOpen = true },
+                )
+                Divider()
+                ToggleRow(
+                    title = "Live countdown",
+                    subtitle = "Show an ongoing countdown to your next event",
+                    checked = vm.liveUpdates,
+                    accent = vm.accent,
+                    onToggle = { vm.updateLiveUpdates(!vm.liveUpdates) },
+                )
+                if (vm.usingSystemCalendar) {
+                    Divider()
+                    ToggleRow(
+                        title = "Also remind in Google Calendar",
+                        // States the consequence outright: this is opt-in duplication, and the
+                        // whole reason NCalendar keeps reminders app-side by default.
+                        subtitle = "Google Calendar will also notify you for these events",
+                        checked = vm.syncRemindersToProvider,
+                        accent = vm.accent,
+                        onToggle = { vm.updateSyncRemindersToProvider(!vm.syncRemindersToProvider) },
+                    )
+                }
+                Divider()
                 NavRow("System notifications", value = "") {
                     val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                         .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
@@ -204,6 +242,19 @@ fun SettingsScreen(vm: CalendarViewModel) {
             onConfirm = {
                 vm.updateDefaultReminder(it)
                 defaultReminderPickerOpen = false
+            },
+        )
+    }
+    if (allDayTimePickerOpen) {
+        NTimePickerSheet(
+            title = "All-day reminder time",
+            initial = vm.allDayReminderTime,
+            ndot = vm.ndot,
+            accent = vm.accent,
+            onDismiss = { allDayTimePickerOpen = false },
+            onConfirm = {
+                vm.updateAllDayReminderTime(it)
+                allDayTimePickerOpen = false
             },
         )
     }

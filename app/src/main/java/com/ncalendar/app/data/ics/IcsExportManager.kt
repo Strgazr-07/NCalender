@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
 import com.ncalendar.app.data.EventItem
+import com.ncalendar.app.data.RRule
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -45,7 +46,7 @@ object IcsExportManager {
         }
         e.location?.takeIf { it.isNotBlank() }?.let { appendLine("LOCATION:${escape(it)}") }
         e.notes?.takeIf { it.isNotBlank() }?.let { appendLine("DESCRIPTION:${escape(it)}") }
-        e.repeat.toRRule(e.repeatInterval, e.repeatByDays, e.repeatEndDate, e.repeatEndCount)
+        RRule.of(e.repeat, e.repeatInterval, e.repeatByDays, e.repeatEndDate, e.repeatEndCount, e.allDay)
             ?.let { appendLine("RRULE:$it") }
         appendLine("END:VEVENT")
     }

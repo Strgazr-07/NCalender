@@ -3,6 +3,7 @@ package com.ncalendar.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -86,6 +87,7 @@ fun DayView(vm: CalendarViewModel, events: List<EventItem>) {
         }
 
         val density = LocalDensity.current
+        val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
         val hourHPx = with(density) { HOUR_H.toPx() }
         val gridHeight = HOUR_H * (DAY_END - DAY_START)
         var createStartMin by remember(state.selDay) { mutableIntStateOf(-1) }
@@ -110,9 +112,17 @@ fun DayView(vm: CalendarViewModel, events: List<EventItem>) {
                                 m in s..end
                             }
                         }
-                        detectVerticalDragGestures(
+                        // AFTER LONG PRESS, deliberately. This block sits inside a
+                        // verticalScroll, and a child that claims plain vertical drags wins
+                        // over the parent scroll — so with detectVerticalDragGestures every
+                        // attempt to scroll the timeline instead started drawing a new event,
+                        // and the day could not be scrolled at all. Requiring a long press
+                        // first leaves ordinary swipes to the scroller, and matches the
+                        // long-press-to-act vocabulary the event blocks already use.
+                        detectDragGesturesAfterLongPress(
                             onDragStart = { pos ->
                                 if (!hitsEvent(pos.y)) {
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                     createStartMin = snap(pos.y)
                                     createEndMin = (createStartMin + 30).coerceAtMost(24 * 60)
                                 }

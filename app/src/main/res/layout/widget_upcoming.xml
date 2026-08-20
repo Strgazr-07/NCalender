@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/upcomingRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_preview_bg"
+    android:background="@drawable/widget_surface_dark"
     android:padding="8dp">
 
     <ListView
@@ -19,7 +20,7 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:text="No upcoming events"
-        android:textColor="#8A8A88"
+        android:textColor="@color/widget_preview_text_dim"
         android:textSize="13sp"
         android:fontFamily="@font/ntype82_regular" />
 </FrameLayout>

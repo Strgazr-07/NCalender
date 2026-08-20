@@ -21,6 +21,7 @@ data class EventEntity(
     val repeatByDays: Set<Int> = emptySet(),
     val repeatEndDate: LocalDate? = null,
     val repeatEndCount: Int? = null,
+    val repeatExceptionDates: Set<LocalDate> = emptySet(),
     val reminders: List<Int>,
     val location: String?,
     val notes: String?,
@@ -41,6 +42,7 @@ fun EventEntity.toDomain(): EventItem {
         repeatByDays = repeatByDays,
         repeatEndDate = repeatEndDate,
         repeatEndCount = repeatEndCount,
+        repeatExceptionDates = repeatExceptionDates,
         reminders = reminders,
         location = location,
         notes = notes,
@@ -62,6 +64,7 @@ fun EventItem.toEntity() = EventEntity(
     repeatByDays = repeatByDays,
     repeatEndDate = repeatEndDate,
     repeatEndCount = repeatEndCount,
+    repeatExceptionDates = repeatExceptionDates,
     reminders = reminders,
     location = location,
     notes = notes,
@@ -93,4 +96,11 @@ class Converters {
     @TypeConverter
     fun toIntSet(v: String): Set<Int> =
         if (v.isBlank()) emptySet() else v.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+
+    @TypeConverter
+    fun fromLocalDateSet(v: Set<LocalDate>): String = v.sorted().joinToString(",") { it.toString() }
+
+    @TypeConverter
+    fun toLocalDateSet(v: String): Set<LocalDate> =
+        if (v.isBlank()) emptySet() else v.split(",").mapNotNull { s -> runCatching { LocalDate.parse(s.trim()) }.getOrNull() }.toSet()
 }

@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.ncalendar.app.data.EventRepository
+import com.ncalendar.app.notifications.ReminderScheduler
 import com.ncalendar.app.widget.AppWidgets
 import java.util.concurrent.TimeUnit
 
@@ -18,9 +19,12 @@ class IcsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
     override suspend fun doWork(): Result = runCatching {
         IcsSyncManager.syncAll(applicationContext)
-        // Re-read the provider (now including refreshed subscription events) and
-        // repaint widgets so the update lands even if the UI is closed.
-        EventRepository.get(applicationContext).refresh()
+        // Re-read the provider (now including refreshed subscription events), re-arm alarms
+        // for anything the sync added or moved, and repaint widgets — so the update lands
+        // even if the UI is closed.
+        val repo = EventRepository.get(applicationContext)
+        repo.refresh(force = true)
+        ReminderScheduler.syncAll(applicationContext, repo.events.value)
         AppWidgets.refreshAll(applicationContext)
         Result.success()
     }.getOrElse { Result.retry() }

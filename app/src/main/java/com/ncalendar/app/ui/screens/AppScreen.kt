@@ -152,13 +152,18 @@ fun AppScreen(vm: CalendarViewModel) {
             }
         }
 
-        PlusFab(
-            onClick = { vm.openNewEvent(state.selDay) },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = ScreenPad, bottom = 22.dp),
-        )
+        // Month view has its own "+" in the day-summary card header. The floating button
+        // overlapped that card's bottom-right on most phones, and the 88dp spacer that used to
+        // hold it clear was a big part of why the card fell off the bottom of shorter screens.
+        if (state.view != ViewMode.MONTH) {
+            PlusFab(
+                onClick = { vm.openNewEvent(state.selDay) },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = ScreenPad, bottom = 22.dp),
+            )
+        }
 
         if (state.pickerOpen) MonthYearPickerSheet(vm)
         if (state.menuEventId != null) LongPressMenu(vm, events)
@@ -294,12 +299,10 @@ private fun NowNextSpine(vm: CalendarViewModel, events: List<EventItem>, now: Lo
 
     val data = when {
         ongoing != null -> {
-            val leftMin = java.time.Duration.between(now, ongoing.end).toMinutes()
-            SpineData("Happening now", ongoing.title, "$leftMin min left", vm.accent, vm.accent.copy(alpha = 0.10f), vm.accent.copy(alpha = 0.4f), vm.accent) { vm.openEvent(ongoing.id) }
+            SpineData("Happening now", ongoing.title, CalendarFormats.remaining(now, ongoing.end), vm.accent, vm.accent.copy(alpha = 0.10f), vm.accent.copy(alpha = 0.4f), vm.accent) { vm.openEvent(ongoing.id) }
         }
         next != null -> {
-            val mins = java.time.Duration.between(now, next.start).toMinutes()
-            val cd = if (mins < 60) "in $mins min" else "in ${mins / 60}h${if (mins % 60 != 0L) " ${mins % 60}m" else ""}"
+            val cd = CalendarFormats.countdown(now, next.start)
             val pre = if (next.startDate == vm.today) "" else " · ${CalendarFormats.fmtDateFull(next.startDate, vm.today)}"
             SpineData("Up next$pre", next.title, cd, vm.accent, NColors.surfaceAlt, NColors.borderStrong, NColors.textDim) { vm.openEvent(next.id) }
         }

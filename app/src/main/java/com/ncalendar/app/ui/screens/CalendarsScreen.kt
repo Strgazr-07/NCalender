@@ -32,17 +32,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ncalendar.app.data.CalendarFormats
+import com.ncalendar.app.data.CalendarInfo
 import com.ncalendar.app.data.Calendars
 import com.ncalendar.app.data.EventItem
+import com.ncalendar.app.data.accountKey
 import com.ncalendar.app.data.ics.IcsSubscription
 import com.ncalendar.app.data.ics.SubscriptionCalendars
+import com.ncalendar.app.ui.components.BellGlyph
 import com.ncalendar.app.ui.components.Dot
 import com.ncalendar.app.ui.components.MonoLabel
+import com.ncalendar.app.ui.components.NReminderPickerSheet
 import com.ncalendar.app.ui.components.RoundIconButton
 import com.ncalendar.app.ui.theme.NColors
 import com.ncalendar.app.ui.theme.NFonts
@@ -56,7 +62,7 @@ fun CalendarsScreen(vm: CalendarViewModel) {
     // regular account groups (they're a device-local mirror, not a real account).
     val accounts = calendars
         .filterNot { it.accountName == SubscriptionCalendars.ACCOUNT_NAME }
-        .groupBy { it.accountName.ifBlank { "On this device" } }.toList()
+        .groupBy { it.accountKey }.toList()
     val subtitle = if (vm.usingSystemCalendar) "Synced via Android accounts" else "Local only · private to this phone"
 
     Column(Modifier.fillMaxSize().background(NColors.bg).statusBarsPadding()) {
@@ -75,66 +81,7 @@ fun CalendarsScreen(vm: CalendarViewModel) {
                 .navigationBarsPadding()
                 .padding(horizontal = ScreenPad),
         ) {
-            accounts.forEach { (account, cals) ->
-                // Account header — icon + email left-aligned to the screen edge.
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 22.dp, bottom = 12.dp),
-                ) {
-                    Box(
-                        Modifier.size(36.dp).background(NColors.surfaceSel2, RoundedCornerShape(11.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(account.take(1).uppercase(), color = NColors.textPrimary, fontFamily = NFonts.Mono, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text(account, color = NColors.textPrimary, fontSize = 16.sp)
-                        Spacer(Modifier.height(2.dp))
-                        MonoLabel(cals.firstOrNull()?.accountType?.ifBlank { "Local" } ?: "Local", color = NColors.textFainter)
-                    }
-                }
-
-                // Calendars for this account — one card, rows share a left edge, dividers between.
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(NColors.surface, RoundedCornerShape(18.dp))
-                        .border(1.dp, NColors.border, RoundedCornerShape(18.dp)),
-                ) {
-                    cals.forEachIndexed { i, c ->
-                        val on = vm.isCalendarVisible(c.id)
-                        val count = events.count { it.calendarId == c.id }
-                        if (i != 0) Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(1.dp).background(NColors.border))
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { vm.toggleCalendarVisible(c.id) }
-                                .padding(horizontal = 18.dp, vertical = 18.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            val fill by animateColorAsState(if (on) c.color else Color.Transparent, label = "cb")
-                            Box(
-                                Modifier
-                                    .size(20.dp)
-                                    .background(fill, RoundedCornerShape(6.dp))
-                                    .border(2.dp, c.color, RoundedCornerShape(6.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (on) Text("✓", color = Color(0xFF15150F), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(Modifier.width(16.dp))
-                            Text(
-                                c.name,
-                                color = if (on) NColors.textPrimary else NColors.textFainter,
-                                fontSize = 16.sp,
-                                modifier = Modifier.weight(1f),
-                            )
-                            MonoLabel("$count events", color = NColors.textFainter, size = 11.sp)
-                        }
-                    }
-                }
-            }
+            AccountCalendarGroups(vm, accounts, events)
 
             Spacer(Modifier.height(26.dp))
 
@@ -188,6 +135,138 @@ fun CalendarsScreen(vm: CalendarViewModel) {
                 )
             }
         }
+    }
+}
+
+/**
+ * Account groups with real checkboxes — the account row toggles every calendar in that account
+ * at once, without touching the individual calendar prefs underneath, so turning the account
+ * back on restores exactly what was chosen calendar-by-calendar before. Shared between
+ * CalendarsScreen and the first-run AccountPickerScreen so both stay visually identical.
+ */
+@Composable
+internal fun AccountCalendarGroups(
+    vm: CalendarViewModel,
+    accounts: List<Pair<String, List<CalendarInfo>>>,
+    events: List<EventItem>,
+) {
+    // Which calendar's default-reminder sheet is open, if any.
+    var reminderForCalendar by remember { mutableStateOf<String?>(null) }
+
+    accounts.forEach { (account, cals) ->
+        val accountOn = vm.isAccountVisible(account)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { vm.toggleAccountVisible(account) }
+                .padding(top = 22.dp, bottom = 12.dp),
+        ) {
+            Box(
+                Modifier.size(36.dp).background(NColors.surfaceSel2, RoundedCornerShape(11.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(account.take(1).uppercase(), color = NColors.textPrimary, fontFamily = NFonts.Mono, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(account, color = if (accountOn) NColors.textPrimary else NColors.textFainter, fontSize = 16.sp)
+                Spacer(Modifier.height(2.dp))
+                MonoLabel(cals.firstOrNull()?.accountType?.ifBlank { "Local" } ?: "Local", color = NColors.textFainter)
+            }
+            val fill by animateColorAsState(if (accountOn) vm.accent else Color.Transparent, label = "acctcb")
+            Box(
+                Modifier
+                    .size(22.dp)
+                    .background(fill, RoundedCornerShape(6.dp))
+                    .border(2.dp, if (accountOn) vm.accent else NColors.borderStrong, RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (accountOn) Text("✓", color = Color(0xFF15150F), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Dimmed (not hidden) while the account itself is off — the user can still see and
+        // change individual choices, which take effect again once the account is back on.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .alpha(if (accountOn) 1f else 0.45f)
+                .background(NColors.surface, RoundedCornerShape(18.dp))
+                .border(1.dp, NColors.border, RoundedCornerShape(18.dp)),
+        ) {
+            cals.forEachIndexed { i, c ->
+                val on = vm.isCalendarVisible(c.id)
+                val visible = accountOn && on
+                val count = events.count { it.calendarId == c.id }
+                if (i != 0) Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(1.dp).background(NColors.border))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = accountOn) { vm.toggleCalendarVisible(c.id) }
+                        .padding(horizontal = 18.dp, vertical = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val fill by animateColorAsState(if (on) c.color else Color.Transparent, label = "cb")
+                    Box(
+                        Modifier
+                            .size(20.dp)
+                            .background(fill, RoundedCornerShape(6.dp))
+                            .border(2.dp, c.color, RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (on) Text("✓", color = Color(0xFF15150F), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            c.name,
+                            color = if (on) NColors.textPrimary else NColors.textFainter,
+                            fontSize = 16.sp,
+                        )
+                        val defaults = vm.calendarDefaultReminders(c.id)
+                        if (defaults.isNotEmpty()) {
+                            Spacer(Modifier.height(2.dp))
+                            MonoLabel(
+                                "Remind ${CalendarFormats.reminderLabel(defaults.min())}",
+                                color = vm.accent, size = 10.sp,
+                            )
+                        }
+                    }
+                    MonoLabel(if (visible) "$count events" else "Hidden", color = NColors.textFainter, size = 11.sp)
+                    // Read-only calendars (synced Birthdays/Holidays) carry no reminders of
+                    // their own and can't be edited event-by-event, so a per-calendar default
+                    // is the only way to get notified about anything in them at all.
+                    Spacer(Modifier.width(10.dp))
+                    Box(
+                        Modifier
+                            .size(32.dp)
+                            .background(NColors.surfaceHi, RoundedCornerShape(9.dp))
+                            .clickable { reminderForCalendar = c.id },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BellGlyph(size = 15.dp)
+                    }
+                }
+            }
+        }
+    }
+
+    reminderForCalendar?.let { calId ->
+        NReminderPickerSheet(
+            accent = vm.accent,
+            ndot = vm.ndot,
+            onDismiss = { reminderForCalendar = null },
+            onConfirm = { minutes ->
+                vm.setCalendarDefaultReminders(calId, listOf(minutes))
+                reminderForCalendar = null
+            },
+            onClear = {
+                vm.setCalendarDefaultReminders(calId, emptyList())
+                reminderForCalendar = null
+            },
+            title = "Default reminder for this calendar",
+        )
     }
 }
 

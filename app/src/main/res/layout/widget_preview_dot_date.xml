@@ -23,7 +23,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:text="THU"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/widget_preview_text"
             android:textSize="11sp"
             android:letterSpacing="0.1"
             android:fontFamily="@font/ndot55_regular" />
@@ -35,7 +35,7 @@
         android:layout_weight="1"
         android:gravity="center"
         android:text="24"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/widget_preview_text"
         android:textSize="52sp"
         android:fontFamily="@font/ntype82_regular" />
 
@@ -44,7 +44,7 @@
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"
         android:text="JULY 2026"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/widget_preview_text"
         android:textSize="10sp"
         android:letterSpacing="0.14"
         android:fontFamily="@font/ntype82_mono" />

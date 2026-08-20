@@ -5,6 +5,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 
 enum class RepeatRule(val label: String) {
     NONE("Never"),
@@ -13,36 +14,6 @@ enum class RepeatRule(val label: String) {
     WEEKDAY("Weekdays"),
     MONTHLY("Monthly"),
     YEARLY("Each year");
-
-    /** iCal RRULE for the system calendar provider, or null for non-repeating. */
-    fun toRRule(
-        interval: Int = 1,
-        byDays: Set<Int> = emptySet(),
-        until: LocalDate? = null,
-        count: Int? = null,
-    ): String? = when (this) {
-        NONE -> null
-        else -> buildList {
-            add("FREQ=${freqName()}")
-            if (interval > 1) add("INTERVAL=${interval.coerceAtLeast(1)}")
-            val days = when {
-                this@RepeatRule == WEEKDAY -> setOf(1, 2, 3, 4, 5)
-                byDays.isNotEmpty() -> byDays
-                else -> emptySet()
-            }
-            if (days.isNotEmpty()) add("BYDAY=${days.sorted().joinToString(",") { isoDayToRRule(it) }}")
-            until?.let { add("UNTIL=${it.year}${pad2(it.monthValue)}${pad2(it.dayOfMonth)}T235959Z") }
-            count?.takeIf { it > 0 }?.let { add("COUNT=$it") }
-        }.joinToString(";")
-    }
-
-    private fun freqName(): String = when (this) {
-        NONE -> ""
-        DAILY -> "DAILY"
-        WEEKLY, WEEKDAY -> "WEEKLY"
-        MONTHLY -> "MONTHLY"
-        YEARLY -> "YEARLY"
-    }
 
     companion object {
         fun fromStorage(s: String?): RepeatRule =
@@ -94,8 +65,6 @@ data class RepeatConfig(
     val count: Int? = null,
 )
 
-private fun pad2(n: Int): String = n.toString().padStart(2, '0')
-
 fun isoDayToRRule(day: Int): String = when (day) {
     1 -> "MO"
     2 -> "TU"
@@ -130,7 +99,17 @@ data class CalendarInfo(
     val accountType: String = "",
     val isWritable: Boolean = true,
     val isPrimary: Boolean = false,
+    /** A regional public-holiday calendar (Google's "Holidays in X", or similarly named on
+     *  other providers) — see CalendarProvider.isHolidayCalendar. Lets "Show holidays" be a
+     *  single Settings toggle instead of requiring the user to find and hide the exact
+     *  holiday calendar by hand in Manage calendars. */
+    val isHoliday: Boolean = false,
 )
+
+/** Matches the exact grouping CalendarsScreen displays accounts under (accountName, falling
+ *  back to "On this device") — the account-level visibility toggle must correspond 1:1 with
+ *  the visual group the user sees, not some other derived key. */
+val CalendarInfo.accountKey: String get() = accountName.ifBlank { "On this device" }
 
 object Calendars {
     // The offline calendar set: everything stays on this phone, no accounts.
@@ -155,6 +134,13 @@ data class EventItem(
     val repeatByDays: Set<Int> = emptySet(),
     val repeatEndDate: LocalDate? = null,
     val repeatEndCount: Int? = null,
+    // Local-only ("edit/delete just this occurrence") series exceptions: dates the base series
+    // should NOT expand into an instance for, because either a standalone replacement event
+    // exists for that date or the occurrence was deleted outright. Only meaningful on the raw
+    // base entity Recurrence.expand reads; irrelevant (and unused) on an already-expanded
+    // instance. System-calendar events use CalendarContract's own exception mechanism instead —
+    // see CalendarProvider.insertExceptionEdit/insertExceptionCancel.
+    val repeatExceptionDates: Set<LocalDate> = emptySet(),
     val reminders: List<Int> = emptyList(),
     val location: String? = null,
     val notes: String? = null,
@@ -167,6 +153,21 @@ data class EventItem(
     val startDate: LocalDate get() = start.toLocalDate()
     val endDate: LocalDate get() = end.toLocalDate()
 }
+
+/** The recurring SERIES' own DTSTART/duration, as read from CalendarContract directly (not
+ *  recurrence-expanded). See CalendarProvider.queryEventBase. */
+data class EventBase(
+    val start: LocalDateTime,
+    val durationMinutes: Long,
+    val allDay: Boolean,
+    val rrule: String?,
+)
+
+/** How much of a recurring series an edit/delete/drag applies to. THIS_AND_FUTURE is
+ *  deliberately not offered: it needs UNTIL-splitting the original series and re-homing any
+ *  later exceptions, which is a lot of provider surgery for comparatively little payoff over
+ *  just these two. */
+enum class EditScope { THIS_EVENT, ALL_EVENTS }
 
 /** Date/time labels + tiny NLU used across the app — ported from the original design's Component logic. */
 object CalendarFormats {
@@ -216,6 +217,56 @@ object CalendarFormats {
 
     fun timeLabelFor(e: EventItem): String =
         if (e.allDay) "All-day" else "${fmtTime(e.start.toLocalTime())} – ${fmtTime(e.end.toLocalTime())}"
+
+    /**
+     * How far off [to] is, in the largest unit that still reads naturally. The load-bearing
+     * rule is that everything past today buckets by CALENDAR DAY, not by elapsed duration —
+     * bucketing on `duration / 1440` renders "tomorrow at 9am, seen from 11pm tonight" as
+     * "in 10h", and (the reported bug) leaves hours accumulating without limit until a
+     * five-week-away event reads "in 820h 44m". Only same-day events fall through to hours.
+     *
+     * [compact] trims the words for tight spaces (widget corners): "3d" rather than "in 3 days".
+     */
+    fun countdown(from: LocalDateTime, to: LocalDateTime, compact: Boolean = false): String {
+        val minutes = java.time.Duration.between(from, to).toMinutes()
+        if (minutes <= 0) return "now"
+        val days = ChronoUnit.DAYS.between(from.toLocalDate(), to.toLocalDate())
+        return when {
+            days == 0L && minutes < 60 -> if (compact) "${minutes}m" else "in $minutes min"
+            days == 0L -> {
+                val h = minutes / 60
+                val m = minutes % 60
+                // Minutes stop earning their place past a few hours out.
+                if (compact) "${h}h" else if (h >= 6 || m == 0L) "in ${h}h" else "in ${h}h ${m}m"
+            }
+            days == 1L -> if (compact) "1d" else "tomorrow"
+            days < 7L -> if (compact) "${days}d" else "in $days days"
+            days < 28L -> {
+                val weeks = days / 7
+                if (compact) "${weeks}w" else if (weeks == 1L) "in 1 week" else "in $weeks weeks"
+            }
+            to.year != from.year -> "${fmtDateShort(to.toLocalDate())}, ${to.year}"
+            else -> fmtDateShort(to.toLocalDate())
+        }
+    }
+
+    /** How much of an in-progress event is left. Same bucketing as [countdown], phrased as a
+     *  remainder rather than a wait. */
+    fun remaining(now: LocalDateTime, end: LocalDateTime, compact: Boolean = false): String {
+        val minutes = java.time.Duration.between(now, end).toMinutes()
+        if (minutes <= 0) return "ending"
+        val days = ChronoUnit.DAYS.between(now.toLocalDate(), end.toLocalDate())
+        return when {
+            days == 0L && minutes < 60 -> if (compact) "${minutes}m" else "$minutes min left"
+            days == 0L -> {
+                val h = minutes / 60
+                val m = minutes % 60
+                if (compact) "${h}h" else if (h >= 6 || m == 0L) "${h}h left" else "${h}h ${m}m left"
+            }
+            days == 1L -> if (compact) "1d" else "ends tomorrow"
+            else -> if (compact) "${days}d" else "ends ${fmtDateShort(end.toLocalDate())}"
+        }
+    }
 
     fun reminderLabel(m: Int): String = when {
         m == 0 -> "At time of event"

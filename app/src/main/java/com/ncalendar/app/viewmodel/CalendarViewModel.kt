@@ -12,7 +12,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ncalendar.app.data.CalendarInfo
 import com.ncalendar.app.data.Calendars
+import com.ncalendar.app.data.accountKey
 import com.ncalendar.app.data.DarkBackgroundStyle
+import com.ncalendar.app.data.DayIndex
+import com.ncalendar.app.data.EditScope
 import com.ncalendar.app.data.EventItem
 import com.ncalendar.app.data.EventRepository
 import com.ncalendar.app.data.Prefs
@@ -63,6 +66,20 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var defaultReminder by mutableStateOf(prefs.defaultReminderMinutes)
         private set
+    var allDayReminderTime by mutableStateOf(prefs.allDayReminderTime)
+        private set
+    var liveUpdates by mutableStateOf(prefs.liveUpdates)
+        private set
+    var syncRemindersToProvider by mutableStateOf(prefs.syncRemindersToProvider)
+        private set
+    var showHolidays by mutableStateOf(prefs.showHolidays)
+        private set
+
+    fun updateShowHolidays(enabled: Boolean) {
+        showHolidays = enabled
+        prefs.showHolidays = enabled
+        refreshAfterFilterChange()
+    }
     var darkTheme by mutableStateOf(prefs.darkTheme)
         private set
     var themeMode by mutableStateOf(prefs.themeMode)
@@ -79,7 +96,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     fun updateLocalOnly(v: Boolean) {
         prefs.localOnly = v
         localOnly = v
-        viewModelScope.launch { repo.refresh(today) }
+        viewModelScope.launch { repo.refresh(today, force = true) }
     }
 
     // ---------------- .ics subscriptions ----------------
@@ -103,7 +120,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             syncingSubs = true
             subscriptions = IcsSyncManager.syncOne(appCtx, sub.id)
-            repo.refresh(today)
+            repo.refresh(today, force = true)
             AppWidgets.refreshAll(appCtx)
             syncingSubs = false
         }
@@ -114,7 +131,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             syncingSubs = true
             subscriptions = IcsSyncManager.syncAll(appCtx)
-            repo.refresh(today)
+            repo.refresh(today, force = true)
             AppWidgets.refreshAll(appCtx)
             syncingSubs = false
         }
@@ -126,7 +143,7 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         if (subscriptions.isEmpty()) IcsSyncWorker.cancelPeriodic(appCtx)
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
             sub?.calendarId?.let { SubscriptionCalendars.deleteCalendar(appCtx, it) }
-            repo.refresh(today)
+            repo.refresh(today, force = true)
             AppWidgets.refreshAll(appCtx)
         }
     }
@@ -167,6 +184,9 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
             darkTheme = mode == ThemeMode.DARK
             prefs.darkTheme = darkTheme
         }
+        // Widgets read the same theme pref but have no way to observe it — without an explicit
+        // repaint they'd keep their old colors until their next 30-minute tick.
+        AppWidgets.refreshAll(appCtx)
     }
 
     fun updateDarkBackgroundStyle(style: DarkBackgroundStyle) {
@@ -177,12 +197,16 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     fun updateAccent(argb: Int) {
         accent = Color(argb)
         prefs.accentColorArgb = argb
+        AppWidgets.refreshAll(appCtx)
     }
 
-    // Snapshot-backed so any composable that reads it recomposes on toggle.
-    private val visibility = mutableStateMapOf<String, Boolean>().apply {
-        Calendars.all.forEach { put(it.id, prefs.isCalendarVisible(it.id)) }
-    }
+    // Snapshot-backed so any composable that reads it recomposes on toggle. Hydrated from
+    // EVERY known calendar/account via the repo.calendars collector in init{} below — NOT
+    // seeded here from Calendars.all, which was the source of a real bug: it only ever knew
+    // about the 3 demo calendars, so hiding a real (numeric) system calendar id was written to
+    // prefs but never read back, and silently reappeared on the next app start.
+    private val visibility = mutableStateMapOf<String, Boolean>()
+    private val accountVisibility = mutableStateMapOf<String, Boolean>()
 
     init {
         viewModelScope.launch { repo.refresh(today) }
@@ -203,6 +227,51 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
                 AppWidgets.refreshAll(ctx)
             }
         }
+        viewModelScope.launch {
+            repo.calendars.collect { cals ->
+                // Subscribed-feed calendars are a device-local mirror, not a real account —
+                // CalendarsScreen already excludes them from the account grouping, and the
+                // first-run picker below must too.
+                val real = cals.filterNot { it.accountName == SubscriptionCalendars.ACCOUNT_NAME }
+                visibility.clear()
+                cals.forEach { visibility[it.id] = prefs.isCalendarVisible(it.id) }
+                accountVisibility.clear()
+                real.map { it.accountKey }.distinct().forEach { accountVisibility[it] = prefs.isAccountVisible(it) }
+                maybeShowAccountPicker(real)
+            }
+        }
+    }
+
+    /**
+     * First sync after granting calendar access: shows a "these will show — uncheck any you
+     * don't want" review, since a default-all-on denylist otherwise dumps every calendar from
+     * every connected account straight into the UI with no way to tell in advance. Fires at
+     * most once — [finishAccountPicker] latches [Prefs.calendarFilterInitialized] so this
+     * never re-triggers on a later refresh (e.g. after the picker itself, or after a plain
+     * account re-sync).
+     */
+    private fun maybeShowAccountPicker(realCalendars: List<CalendarInfo>) {
+        if (prefs.calendarFilterInitialized) return
+        if (!repo.usingSystemCalendar) return
+        if (state.screen != Screen.APP) return // don't yank the user off whatever they're doing
+        // repo.calendars starts as (and falls back to) the built-in offline set, whose ids are
+        // slugs rather than the provider's numeric ones. Without this check the picker could
+        // fire on that placeholder list during the window before the first real query lands,
+        // showing three calendars the user doesn't have.
+        val synced = realCalendars.filter { it.id.toLongOrNull() != null }
+        if (synced.isEmpty()) return // nothing synced yet — wait for a later emission
+        val accounts = synced.map { it.accountKey }.distinct()
+        if (accounts.size <= 1 && synced.size <= 2) {
+            // Nothing worth reviewing — one account, at most a couple of calendars.
+            prefs.calendarFilterInitialized = true
+            return
+        }
+        state = state.copy(screen = Screen.ACCOUNT_PICKER)
+    }
+
+    fun finishAccountPicker() {
+        prefs.calendarFilterInitialized = true
+        state = state.copy(screen = Screen.APP)
     }
 
     /** Re-read the store — call on resume and after granting calendar permission. */
@@ -222,27 +291,45 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     // ---------------- queries ----------------
 
     fun isCalendarVisible(id: String): Boolean = visibility[id] != false
+    fun isAccountVisible(accountKey: String): Boolean = accountVisibility[accountKey] != false
 
+    /** Calendar/account visibility now lives at the query level (EventRepository filters at
+     *  the CalendarContract query itself), so a toggle needs an actual reload — it can't just
+     *  re-filter an in-memory list the way it used to. */
     fun toggleCalendarVisible(id: String) {
         val next = !isCalendarVisible(id)
         visibility[id] = next
         prefs.setCalendarVisible(id, next)
+        refreshAfterFilterChange()
     }
 
-    // Filtering + dedup + day indexing scan the full event list (thousands of
-    // instances with several accounts connected), so results are memoized and
-    // only recomputed when the event list or calendar visibility changes —
-    // recompositions and scrolling hit the cache.
+    fun toggleAccountVisible(accountKey: String) {
+        val next = !isAccountVisible(accountKey)
+        accountVisibility[accountKey] = next
+        prefs.setAccountVisible(accountKey, next)
+        refreshAfterFilterChange()
+    }
+
+    private fun refreshAfterFilterChange() {
+        viewModelScope.launch {
+            repo.refresh(today, force = true)
+            AppWidgets.refreshAll(appCtx)
+        }
+    }
+
+    // Dedup scans the full event list (thousands of instances with several accounts
+    // connected), so results are memoized against list identity — recompositions and
+    // scrolling hit the cache. Calendar/account visibility is already applied server-side
+    // (EventRepository filters at the CalendarContract query level, or in-memory for the
+    // local-only store), so `all` only ever contains events from currently-visible
+    // calendars — this just collapses the cross-account duplicates that survive that filter.
     private var visCacheInput: List<EventItem>? = null
-    private var visCacheVis: Map<String, Boolean>? = null
     private var visCache: List<EventItem> = emptyList()
 
     fun visibleEvents(all: List<EventItem>): List<EventItem> {
-        val vis = visibility.toMap() // snapshot read keeps composition tracking on toggles
-        if (visCacheInput !== all || visCacheVis != vis) {
-            visCache = dedupAcrossCalendars(all.filter { vis[it.calendarId] != false })
+        if (visCacheInput !== all) {
+            visCache = dedupAcrossCalendars(all)
             visCacheInput = all
-            visCacheVis = vis
         }
         return visCache
     }
@@ -263,9 +350,6 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private val dayComparator =
-        compareByDescending<EventItem> { it.allDay }.thenBy { it.start }
-
     fun eventsOn(all: List<EventItem>, date: LocalDate): List<EventItem> =
         buildDayIndex(all)[date].orEmpty()
 
@@ -275,24 +359,14 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * One-pass index of visible events keyed by every day they cover. Lets the
      * month grid, week columns, day view and agenda do O(1) lookups instead of
-     * re-scanning all events per cell.
+     * re-scanning all events per cell. The day-span math lives in [DayIndex] so
+     * it's unit-testable; this wrapper only memoizes against list identity.
      */
     fun buildDayIndex(all: List<EventItem>): Map<LocalDate, List<EventItem>> {
         val visible = visibleEvents(all)
         if (indexCacheInput !== visible) {
-            val map = HashMap<LocalDate, MutableList<EventItem>>()
-            for (e in visible) {
-                var d = e.startDate
-                var guard = 0
-                while (!d.isAfter(e.endDate) && guard < 400) {
-                    map.getOrPut(d) { mutableListOf() }.add(e)
-                    d = d.plusDays(1)
-                    guard++
-                }
-            }
-            map.values.forEach { it.sortWith(dayComparator) }
+            indexCache = DayIndex.build(visible)
             indexCacheInput = visible
-            indexCache = map
         }
         return indexCache
     }
@@ -315,19 +389,27 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun openEvent(id: String) { state = state.copy(selId = id, screen = Screen.DETAIL) }
     fun closeDetail() { state = state.copy(screen = Screen.APP, selId = null) }
-    fun selectDay(day: LocalDate) { state = state.copy(selDay = day) }
+    /** Selecting a spill-over cell (a greyed day from the previous/next month in the grid)
+     *  moves the anchor with it — otherwise the selection ring lands on a dimmed out-of-month
+     *  cell and the grid stays on the old month, which reads as the tap having half-worked. */
+    fun selectDay(day: LocalDate) {
+        val sameMonth = day.year == state.anchor.year && day.monthValue == state.anchor.monthValue
+        state = state.copy(selDay = day, anchor = if (sameMonth) state.anchor else day)
+    }
     fun openDayEvents(day: LocalDate = state.selDay) { state = state.copy(selDay = day, anchor = day, screen = Screen.DAY_EVENTS) }
 
     /** True when the system back button has something to pop (otherwise it exits the app). */
     val canGoBack: Boolean
-        get() = state.pickerOpen || state.menuEventId != null || state.screen != Screen.APP
+        get() = state.pendingScopeAction != null || state.pickerOpen || state.menuEventId != null || state.screen != Screen.APP
 
     /** Handle a system back press. Returns true if it was consumed. */
     fun onBack(): Boolean {
         val s = state
         return when {
+            s.pendingScopeAction != null -> { cancelScope(); true }
             s.menuEventId != null -> { closeMenu(); true }
             s.pickerOpen -> { closePicker(); true }
+            s.screen == Screen.ACCOUNT_PICKER -> { finishAccountPicker(); true }
             s.screen == Screen.EDITOR -> { cancelEdit(); true }
             s.screen == Screen.DETAIL -> { closeDetail(); true }
             s.screen == Screen.DAY_EVENTS -> { backToApp(); true }
@@ -393,7 +475,11 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         notes = "",
     )
 
-    private fun formFromEvent(e: EventItem) = EventForm(
+    private fun formFromEvent(
+        e: EventItem,
+        scope: EditScope = EditScope.ALL_EVENTS,
+        instanceId: String? = null,
+    ) = EventForm(
         id = e.id,
         title = e.title,
         calendarId = e.calendarId,
@@ -410,6 +496,8 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         reminders = e.reminders,
         location = e.location ?: "",
         notes = e.notes ?: "",
+        scope = scope,
+        instanceId = instanceId,
     )
 
     fun openNewEvent(day: LocalDate = state.selDay) {
@@ -428,9 +516,26 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /** Edit button on DetailScreen/LongPressMenu. A recurring event routes through the scope
+     *  sheet first; formFromEvent only fires once a scope is actually chosen (see
+     *  [confirmScope]) since ALL_EVENTS needs an async lookup of the series' true dates. */
     fun openEdit(all: List<EventItem>) {
         val e = all.find { it.id == state.selId } ?: return
-        state = state.copy(form = formFromEvent(e), editId = e.id, screen = Screen.EDITOR)
+        if (e.isRecurring) {
+            state = state.copy(pendingScopeAction = PendingScopeAction.Edit(e.id))
+        } else {
+            beginEdit(e, EditScope.ALL_EVENTS)
+        }
+    }
+
+    private fun beginEdit(e: EventItem, scope: EditScope) {
+        viewModelScope.launch {
+            // ALL_EVENTS on a recurring event must show the SERIES' own dates, not this
+            // instance's — saving an instance's date back as DTSTART would move the whole
+            // series (see EventRepository.save's THIS_EVENT branch and why it exists).
+            val target = if (scope == EditScope.ALL_EVENTS && e.isRecurring) repo.seriesBase(e) ?: e else e
+            state = state.copy(form = formFromEvent(target, scope, e.id), editId = e.id, screen = Screen.EDITOR)
+        }
     }
 
     fun patchForm(patch: (EventForm) -> EventForm) {
@@ -442,10 +547,20 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         state = state.copy(screen = if (state.editId != null) Screen.DETAIL else Screen.APP, form = null)
     }
 
+    fun clearError() { state = state.copy(errorMessage = null) }
+
     fun saveEvent() {
         val f = state.form ?: return
         val wasEditing = state.editId != null
-        val id = state.editId ?: "n${System.currentTimeMillis()}"
+        // For a THIS_EVENT save, the event id must be the ORIGINAL instance id — it carries
+        // the original occurrence date/time EventRepository.save needs to split just this one
+        // occurrence out (ORIGINAL_INSTANCE_TIME on system calendars, the exception date on
+        // local ones). ALL_EVENTS (or a non-recurring event) uses the normal series/new id.
+        val id = if (f.scope == EditScope.THIS_EVENT) {
+            f.instanceId ?: state.editId ?: "n${System.currentTimeMillis()}"
+        } else {
+            state.editId ?: "n${System.currentTimeMillis()}"
+        }
         val start = if (f.allDay) f.startDate.atStartOfDay() else LocalDateTime.of(f.startDate, f.startTime)
         val end = if (f.allDay) f.endDate.atStartOfDay() else LocalDateTime.of(f.endDate, f.endTime)
         val event = EventItem(
@@ -455,20 +570,27 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
             start = start,
             end = end,
             allDay = f.allDay,
-            repeat = f.repeat,
-            repeatInterval = f.repeatInterval,
-            repeatByDays = f.repeatByDays,
-            repeatEndDate = f.repeatEndDate,
-            repeatEndCount = f.repeatEndCount,
+            repeat = if (f.scope == EditScope.THIS_EVENT) RepeatRule.NONE else f.repeat,
+            repeatInterval = if (f.scope == EditScope.THIS_EVENT) 1 else f.repeatInterval,
+            repeatByDays = if (f.scope == EditScope.THIS_EVENT) emptySet() else f.repeatByDays,
+            repeatEndDate = if (f.scope == EditScope.THIS_EVENT) null else f.repeatEndDate,
+            repeatEndCount = if (f.scope == EditScope.THIS_EVENT) null else f.repeatEndCount,
             reminders = f.reminders,
             location = f.location.ifBlank { null },
             notes = f.notes.ifBlank { null },
         )
         viewModelScope.launch {
-            val newId = repo.save(event, f.calendarId)
+            val savedId = repo.save(event, f.calendarId, f.scope)
+            if (savedId == null) {
+                // The provider refused to split this occurrence out (e.g. a read-only
+                // calendar) — never fall back to silently editing the whole series instead.
+                state = state.copy(errorMessage = "Couldn't save just this event — try editing the whole series instead.")
+                return@launch
+            }
+            val resolvedId = resolveSavedInstanceId(savedId, event, f.scope)
             state = state.copy(
                 screen = if (wasEditing) Screen.DETAIL else Screen.APP,
-                selId = newId,
+                selId = resolvedId,
                 selDay = f.startDate,
                 anchor = f.startDate,
                 form = null,
@@ -477,15 +599,44 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** repo.save on a recurring series returns the SERIES' base id, but every event actually
+     *  shown to the user carries the "baseId::begin" instance suffix — so naively using the
+     *  base id as selId leaves DetailScreen unable to find it (events.find returns null) and
+     *  it immediately bounces back to the calendar. Resolve to the freshly-saved instance
+     *  that matches the edited occurrence's own date instead. */
+    private fun resolveSavedInstanceId(savedId: String, edited: EventItem, scope: EditScope): String {
+        if (scope == EditScope.THIS_EVENT || edited.repeat == RepeatRule.NONE) return savedId
+        val fresh = events.value
+        return fresh.firstOrNull { Recurrence.baseId(it.id) == savedId && it.startDate == edited.startDate }?.id
+            ?: fresh.firstOrNull { Recurrence.baseId(it.id) == savedId }?.id
+            ?: savedId
+    }
+
     fun deleteEvent() {
         val id = state.selId ?: return
-        viewModelScope.launch { repo.delete(id) }
-        state = state.copy(screen = Screen.APP, selId = null)
+        requestDelete(id)
     }
 
     fun deleteById(id: String) {
-        viewModelScope.launch { repo.delete(id) }
-        state = state.copy(menuEventId = null)
+        requestDelete(id)
+    }
+
+    private fun requestDelete(id: String) {
+        val e = events.value.find { it.id == id }
+        if (e?.isRecurring == true) {
+            state = state.copy(pendingScopeAction = PendingScopeAction.Delete(id))
+        } else {
+            deleteWithScope(id, EditScope.ALL_EVENTS)
+        }
+    }
+
+    private fun deleteWithScope(id: String, scope: EditScope) {
+        viewModelScope.launch { repo.delete(id, scope) }
+        state = state.copy(
+            menuEventId = null,
+            selId = if (state.selId == id) null else state.selId,
+            screen = if (state.selId == id && state.screen == Screen.DETAIL) Screen.APP else state.screen,
+        )
     }
 
     fun dupById(all: List<EventItem>, id: String) {
@@ -498,27 +649,59 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------------- recurring-series scope sheet ----------------
+
+    /** The user picked THIS_EVENT or ALL_EVENTS for whatever [state.pendingScopeAction] holds. */
+    fun confirmScope(all: List<EventItem>, scope: EditScope) {
+        val action = state.pendingScopeAction ?: return
+        state = state.copy(pendingScopeAction = null)
+        when (action) {
+            is PendingScopeAction.Edit -> all.find { it.id == action.id }?.let { beginEdit(it, scope) }
+            is PendingScopeAction.Delete -> deleteWithScope(action.id, scope)
+            is PendingScopeAction.Shift -> all.find { it.id == action.id }?.let { performShift(it, action.deltaMinutes, scope) }
+            is PendingScopeAction.Resize -> all.find { it.id == action.id }?.let { performResize(it, action.deltaMinutes, scope) }
+        }
+    }
+
+    fun cancelScope() { state = state.copy(pendingScopeAction = null) }
+
     // ---------------- drag reschedule (day view) ----------------
 
     fun setDrag(drag: DragState?) { state = state.copy(drag = drag) }
 
     fun shiftEvent(all: List<EventItem>, id: String, deltaMinutes: Int) {
         val e = all.find { it.id == id } ?: return
+        if (e.isRecurring) {
+            state = state.copy(drag = null, pendingScopeAction = PendingScopeAction.Shift(id, deltaMinutes))
+            return
+        }
+        performShift(e, deltaMinutes, EditScope.ALL_EVENTS)
+    }
+
+    private fun performShift(e: EventItem, deltaMinutes: Int, scope: EditScope) {
         val durMin = ChronoUnit.MINUTES.between(e.start, e.end).toInt().coerceAtLeast(15)
         val startMin = (e.start.toLocalTime().toSecondOfDay() / 60 + deltaMinutes)
             .coerceIn(0, 24 * 60 - durMin)
         val newStart = e.startDate.atStartOfDay().plusMinutes(startMin.toLong())
         val newEnd = newStart.plusMinutes(durMin.toLong())
-        viewModelScope.launch { repo.save(e.copy(start = newStart, end = newEnd), e.calendarId) }
+        viewModelScope.launch { repo.save(e.copy(start = newStart, end = newEnd), e.calendarId, scope) }
         state = state.copy(drag = null)
     }
 
     fun resizeEvent(all: List<EventItem>, id: String, deltaMinutes: Int) {
         val e = all.find { it.id == id } ?: return
+        if (e.isRecurring) {
+            state = state.copy(drag = null, pendingScopeAction = PendingScopeAction.Resize(id, deltaMinutes))
+            return
+        }
+        performResize(e, deltaMinutes, EditScope.ALL_EVENTS)
+    }
+
+    private fun performResize(e: EventItem, deltaMinutes: Int, scope: EditScope) {
         val minEnd = e.start.plusMinutes(15)
         val maxEnd = e.startDate.atStartOfDay().plusDays(1)
         val newEnd = e.end.plusMinutes(deltaMinutes.toLong()).coerceAtLeast(minEnd).coerceAtMost(maxEnd)
-        viewModelScope.launch { repo.save(e.copy(end = newEnd), e.calendarId) }
+        viewModelScope.launch { repo.save(e.copy(end = newEnd), e.calendarId, scope) }
         state = state.copy(drag = null)
     }
 
@@ -614,5 +797,49 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     fun updateDefaultReminder(minutes: Int) {
         defaultReminder = minutes
         prefs.defaultReminderMinutes = minutes
+    }
+
+    fun updateAllDayReminderTime(time: LocalTime) {
+        allDayReminderTime = time
+        prefs.allDayReminderTime = time
+        // Every armed all-day alarm was computed against the old time, so they all need
+        // re-arming — syncAll's fingerprint check won't catch this on its own since neither
+        // the events nor their reminder lists changed.
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            ReminderScheduler.resyncAll(appCtx, events.value)
+        }
+    }
+
+    /** Per-calendar default reminders — the path for read-only synced calendars (Birthdays,
+     *  Holidays) whose events carry no reminders of their own and can't be edited to add one. */
+    fun calendarDefaultReminders(calendarId: String): List<Int> = prefs.calendarDefaultReminders(calendarId)
+
+    fun setCalendarDefaultReminders(calendarId: String, minutes: List<Int>) {
+        prefs.setCalendarDefaultReminders(calendarId, minutes)
+        viewModelScope.launch {
+            repo.refresh(today, force = true)
+        }
+    }
+
+    /** Sets reminders on a single event without editing the event itself — works on read-only
+     *  calendars, where the normal save path would be rejected by the provider. */
+    fun setEventReminders(id: String, minutes: List<Int>) {
+        viewModelScope.launch { repo.setReminders(id, minutes) }
+    }
+
+    fun updateLiveUpdates(enabled: Boolean) {
+        liveUpdates = enabled
+        prefs.liveUpdates = enabled
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            // syncAll owns arming/clearing the live chip, so just re-run it.
+            ReminderScheduler.syncAll(appCtx, events.value)
+        }
+    }
+
+    fun updateSyncRemindersToProvider(enabled: Boolean) {
+        syncRemindersToProvider = enabled
+        prefs.syncRemindersToProvider = enabled
+        // Applied to existing events too, not just ones edited from here on.
+        viewModelScope.launch { repo.applyProviderReminderSync(enabled) }
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -51,6 +52,12 @@ import java.time.LocalTime
  * Nothing-styled replacements for the stock Android date/time picker dialogs.
  * Both render as bottom sheets over a scrim, matching the app's sheet language.
  */
+
+/** Readable text/glyph color for content sitting ON an accent-filled surface. The accent is
+ *  user-selectable and includes a near-white option, against which a hardcoded white (the
+ *  previous behavior on the selected-date disc and the confirm button) was invisible. */
+private fun onAccent(accent: Color): Color =
+    if (accent.luminance() > 0.6f) Color(0xFF15150F) else Color.White
 
 @Composable
 private fun PickerSheet(
@@ -85,7 +92,7 @@ private fun PickerSheet(
             )
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Dot(Color(0xFFD71921), size = 5.dp)
+                Dot(NColors.accent, size = 5.dp)
                 Spacer(Modifier.width(8.dp))
                 MonoLabel(title, color = NColors.textDim)
             }
@@ -176,19 +183,24 @@ fun NTimePickerSheet(
 
 // ------------------------------------------------------------- reminder picker
 
-/** Custom "remind me N minutes/hours/days/weeks before" wheel. Emits minutes-before. */
+/** Custom "remind me N minutes/hours/days/weeks before" wheel. Emits minutes-before.
+ *  [onClear], when supplied, adds a "No reminder" action — used where the reminder is an
+ *  optional standing setting (a calendar's default) rather than an item being added to a list. */
 @Composable
 fun NReminderPickerSheet(
     accent: Color,
     ndot: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (Int) -> Unit,
+    title: String = "Custom reminder",
+    confirmLabel: String = "Add reminder",
+    onClear: (() -> Unit)? = null,
 ) {
     val units = listOf("Minutes" to 1, "Hours" to 60, "Days" to 1440, "Weeks" to 10080)
     var amount by remember { mutableStateOf(10) }
     var unitIndex by remember { mutableStateOf(0) }
 
-    PickerSheet("Custom reminder", onDismiss) {
+    PickerSheet(title, onDismiss) {
         Box(Modifier.fillMaxWidth().height(WHEEL_ITEM_H * WHEEL_VISIBLE)) {
             Box(
                 Modifier
@@ -232,10 +244,21 @@ fun NReminderPickerSheet(
         Spacer(Modifier.height(16.dp))
         SheetButtons(
             accent = accent,
-            confirmLabel = "Add reminder",
+            confirmLabel = confirmLabel,
             onDismiss = onDismiss,
             onConfirm = { onConfirm(amount * units[unitIndex].second) },
         )
+        if (onClear != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "No reminder",
+                color = NColors.textDim,
+                fontFamily = NFonts.Mono,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onClear).padding(vertical = 10.dp),
+            )
+        }
     }
 }
 
@@ -494,7 +517,7 @@ fun NDatePickerSheet(
                         Text(
                             d.dayOfMonth.toString(),
                             color = when {
-                                isSel -> Color.White
+                                isSel -> onAccent(accent)
                                 isToday -> accent
                                 inMonth -> NColors.textPrimary
                                 else -> NColors.textGhostDeep
@@ -534,6 +557,72 @@ private fun SheetButtons(
                 .background(accent, RoundedCornerShape(14.dp))
                 .clickable(onClick = onConfirm),
             contentAlignment = Alignment.Center,
-        ) { MonoLabel(confirmLabel, color = Color.White) }
+        ) { MonoLabel(confirmLabel, color = onAccent(accent)) }
+    }
+}
+
+// ---------------------------------------------------------------- recurring-event scope
+
+/**
+ * Asks whether an edit/delete/drag on a recurring event applies to just that occurrence or the
+ * whole series. Shown before the action actually runs — see CalendarViewModel.PendingScopeAction.
+ */
+@Composable
+fun NRecurringScopeSheet(
+    accent: Color,
+    isDelete: Boolean,
+    onDismiss: () -> Unit,
+    onThisEvent: () -> Unit,
+    onAllEvents: () -> Unit,
+) {
+    PickerSheet(if (isDelete) "Delete event" else "Repeating event", onDismiss) {
+        Text(
+            if (isDelete) "This event repeats. What do you want to delete?" else "This event repeats. What do you want to change?",
+            color = NColors.textSecondary,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            modifier = Modifier.padding(bottom = 16.dp),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ScopeOption(
+                title = "This event",
+                subtitle = if (isDelete) "Only this occurrence is deleted" else "Only this occurrence is changed",
+                onClick = onThisEvent,
+            )
+            ScopeOption(
+                title = "All events",
+                subtitle = if (isDelete) "The entire series is deleted" else "Every occurrence in the series is changed",
+                accent = accent,
+                onClick = onAllEvents,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Cancel",
+            color = NColors.textDim,
+            fontFamily = NFonts.Mono,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onDismiss)
+                .padding(vertical = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun ScopeOption(title: String, subtitle: String, onClick: () -> Unit, accent: Color? = null) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(accent?.copy(alpha = 0.12f) ?: NColors.surfaceHi, RoundedCornerShape(14.dp))
+            .border(1.dp, accent ?: NColors.borderStrong, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Text(title, color = NColors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(3.dp))
+        Text(subtitle, color = NColors.textFaint, fontSize = 12.5.sp, lineHeight = 17.sp)
     }
 }
