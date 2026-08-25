@@ -152,18 +152,14 @@ fun AppScreen(vm: CalendarViewModel) {
             }
         }
 
-        // Month view has its own "+" in the day-summary card header. The floating button
-        // overlapped that card's bottom-right on most phones, and the 88dp spacer that used to
-        // hold it clear was a big part of why the card fell off the bottom of shorter screens.
-        if (state.view != ViewMode.MONTH) {
-            PlusFab(
-                onClick = { vm.openNewEvent(state.selDay) },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .navigationBarsPadding()
-                    .padding(end = ScreenPad, bottom = 22.dp),
-            )
-        }
+        // Show the floating "+" button on all views including Month.
+        PlusFab(
+            onClick = { vm.openNewEvent(state.selDay) },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = ScreenPad, bottom = 22.dp),
+        )
 
         if (state.pickerOpen) MonthYearPickerSheet(vm)
         if (state.menuEventId != null) LongPressMenu(vm, events)

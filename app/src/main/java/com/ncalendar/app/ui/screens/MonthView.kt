@@ -154,24 +154,9 @@ private fun DaySummaryCard(vm: CalendarViewModel, day: LocalDate, events: List<E
                     fontFamily = NFonts.Mono,
                     fontSize = 12.sp,
                 )
-                // Always present — it used to be hidden on empty days, i.e. exactly when
-                // someone poking at the app to see whether tapping does anything would look
-                // for it. This chevron is the app's only cue that the card opens the day.
+                // Chevron signals the card opens the day view.
                 Spacer(Modifier.width(6.dp))
                 Text("›", color = if (events.isEmpty()) NColors.textDim else vm.accent, fontSize = 17.sp)
-                // Replaces the floating action button in month view (see AppScreen), which
-                // used to sit on top of this card.
-                Spacer(Modifier.width(10.dp))
-                Box(
-                    Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(NColors.surfaceHi, CircleShape)
-                        .clickable { vm.openNewEvent(day) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("+", color = NColors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium)
-                }
             }
         }
         if (events.isNotEmpty()) {
@@ -197,8 +182,6 @@ private fun DaySummaryCard(vm: CalendarViewModel, day: LocalDate, events: List<E
                 Text("+${events.size - 1} more", color = NColors.textFaint, fontFamily = NFonts.Mono, fontSize = 12.sp)
             }
         } else {
-            // The header's "+" already covers adding here, so this space explains the two
-            // gestures the grid supports instead of repeating that button.
             Spacer(Modifier.height(12.dp))
             MonoLabel("Tap a date to select · hold to add", color = NColors.textGhost, size = 10.sp)
         }
