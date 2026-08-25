@@ -24,7 +24,7 @@
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:text="NEXT EVENT"
-            android:textColor="#8A8A88"
+            android:textColor="@color/widget_preview_text_dim"
             android:textSize="10sp"
             android:letterSpacing="0.2"
             android:fontFamily="@font/ntype82_mono" />
@@ -33,7 +33,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="in 25m"
-            android:textColor="#D71921"
+            android:textColor="@color/widget_preview_accent"
             android:textSize="12sp"
             android:fontFamily="@font/ndot55_regular" />
     </LinearLayout>
@@ -61,7 +61,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Design review"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/widget_preview_text"
                 android:textSize="16sp"
                 android:maxLines="1"
                 android:fontFamily="@font/ntype82_regular" />
@@ -71,7 +71,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
                 android:text="09:30 – 10:30"
-                android:textColor="#C8C8C6"
+                android:textColor="@color/widget_preview_text_secondary"
                 android:textSize="12sp"
                 android:fontFamily="@font/ndot55_regular" />
         </LinearLayout>

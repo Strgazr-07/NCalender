@@ -4,12 +4,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -152,6 +152,7 @@ fun AppScreen(vm: CalendarViewModel) {
             }
         }
 
+        // Show the floating "+" button on all views including Month.
         PlusFab(
             onClick = { vm.openNewEvent(state.selDay) },
             modifier = Modifier
@@ -167,19 +168,46 @@ fun AppScreen(vm: CalendarViewModel) {
 
 @Composable
 private fun TopUtilityRow(vm: CalendarViewModel) {
-    Row(
+    val state = vm.state
+    val showBackToday = when (state.view) {
+        ViewMode.MONTH -> state.anchor.year != vm.today.year || state.anchor.monthValue != vm.today.monthValue
+        else -> state.selDay != vm.today
+    }
+    Box(
         Modifier
             .fillMaxWidth()
             .padding(top = 14.dp, start = ScreenPad - 6.dp, end = ScreenPad - 6.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.clickable { vm.go(Screen.SEARCH) }.padding(8.dp)) {
-            SearchGlyph(size = 20.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            Box(Modifier.clickable { vm.go(Screen.SEARCH) }.padding(8.dp)) {
+                SearchGlyph(size = 20.dp)
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.clickable { vm.go(Screen.SETTINGS) }.padding(8.dp)) {
+                GearGlyph(size = 21.dp)
+            }
         }
-        Spacer(Modifier.width(10.dp))
-        Box(Modifier.clickable { vm.go(Screen.SETTINGS) }.padding(8.dp)) {
-            GearGlyph(size = 21.dp)
+        AnimatedVisibility(
+            visible = showBackToday,
+            enter = fadeIn(tween(200)) + expandHorizontally(tween(200)),
+            exit = fadeOut(tween(150)) + shrinkHorizontally(tween(180)),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .background(NColors.surfaceAlt, RoundedCornerShape(20.dp))
+                    .border(1.dp, NColors.borderStrong, RoundedCornerShape(20.dp))
+                    .clickable { vm.goToday() }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            ) {
+                Dot(vm.accent, size = 6.dp)
+                Spacer(Modifier.width(8.dp))
+                MonoLabel("Back to today", color = NColors.textSecondary)
+            }
         }
     }
 }
@@ -210,11 +238,6 @@ private fun HeaderBar(vm: CalendarViewModel) {
             sub = st.year.toString()
         }
     }
-    val showBackToday = when (state.view) {
-        ViewMode.MONTH -> state.anchor.year != vm.today.year || state.anchor.monthValue != vm.today.monthValue
-        else -> state.selDay != vm.today
-    }
-
     Column(Modifier.padding(top = 10.dp, start = ScreenPad, end = ScreenPad, bottom = 14.dp)) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(
@@ -262,29 +285,6 @@ private fun HeaderBar(vm: CalendarViewModel) {
             RoundIconButton("‹", onClick = { vm.goPrev() }, modifier = Modifier.align(Alignment.CenterStart))
             RoundIconButton("›", onClick = { vm.goNext() }, modifier = Modifier.align(Alignment.CenterEnd))
         }
-        AnimatedVisibility(
-            visible = showBackToday,
-            enter = fadeIn(tween(200)) + expandVertically(tween(220)),
-            exit = fadeOut(tween(150)) + shrinkVertically(tween(200)),
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(top = 16.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(NColors.surfaceAlt, RoundedCornerShape(22.dp))
-                        .border(1.dp, NColors.borderStrong, RoundedCornerShape(22.dp))
-                        .clickable { vm.goToday() }
-                        .padding(horizontal = 18.dp, vertical = 9.dp),
-                ) {
-                    Dot(vm.accent, size = 6.dp)
-                    Spacer(Modifier.width(9.dp))
-                    MonoLabel("Back to today", color = NColors.textSecondary)
-                }
-            }
-        }
     }
 }
 
@@ -295,12 +295,10 @@ private fun NowNextSpine(vm: CalendarViewModel, events: List<EventItem>, now: Lo
 
     val data = when {
         ongoing != null -> {
-            val leftMin = java.time.Duration.between(now, ongoing.end).toMinutes()
-            SpineData("Happening now", ongoing.title, "$leftMin min left", vm.accent, vm.accent.copy(alpha = 0.10f), vm.accent.copy(alpha = 0.4f), vm.accent) { vm.openEvent(ongoing.id) }
+            SpineData("Happening now", ongoing.title, CalendarFormats.remaining(now, ongoing.end), vm.accent, vm.accent.copy(alpha = 0.10f), vm.accent.copy(alpha = 0.4f), vm.accent) { vm.openEvent(ongoing.id) }
         }
         next != null -> {
-            val mins = java.time.Duration.between(now, next.start).toMinutes()
-            val cd = if (mins < 60) "in $mins min" else "in ${mins / 60}h${if (mins % 60 != 0L) " ${mins % 60}m" else ""}"
+            val cd = CalendarFormats.countdown(now, next.start)
             val pre = if (next.startDate == vm.today) "" else " · ${CalendarFormats.fmtDateFull(next.startDate, vm.today)}"
             SpineData("Up next$pre", next.title, cd, vm.accent, NColors.surfaceAlt, NColors.borderStrong, NColors.textDim) { vm.openEvent(next.id) }
         }

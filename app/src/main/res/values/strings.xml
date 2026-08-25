@@ -4,4 +4,6 @@
     <string name="widget_desc_dot_date">Today\'s date in dot-matrix type.</string>
     <string name="widget_desc_agenda">Today\'s events at a glance.</string>
     <string name="widget_desc_mini_month">A minimal month grid with event dots.</string>
+    <string name="widget_desc_upcoming">Your next events — scroll for more.</string>
+    <string name="widget_desc_split">Month grid plus your upcoming events.</string>
 </resources>

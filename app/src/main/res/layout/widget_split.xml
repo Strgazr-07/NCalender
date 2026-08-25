@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Split view: month calendar on the left, scrollable upcoming list on the right.
+
+  The calendar is ONE bitmap with a transparent tap-target overlay on top of it, not a
+  GridView of per-cell bitmaps. That earlier design had each cell guess the size the GridView
+  would give it (so the numbers were repeatedly mis-sized) and put a second collection adapter
+  in this widget, which is what let the grid and the list get their adapters crossed. The list
+  below is now the only collection here.
+
+  The 0.52/0.48 width split MUST match SPLIT_LEFT_FRACTION in Widgets.kt, which sizes the
+  calendar bitmap to the left column.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/splitRoot"
+    android:orientation="horizontal"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_surface_dark">
+
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="0.52"
+        android:padding="8dp">
+
+        <ImageView
+            android:id="@+id/splitCalendar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitXY"
+            android:importantForAccessibility="no" />
+
+        <include
+            layout="@layout/widget_month_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+    <!-- ImageView rather than a plain View: RemoteViews inflates only an allowlist of view
+         classes, and bare android.view.View is not on it — using one crashed the whole widget
+         with "Class not allowed to be inflated". Its color is set programmatically from
+         WidgetPalette, since this widget follows the app's own theme setting rather than the
+         system theme a resource qualifier would resolve against. -->
+    <ImageView
+        android:id="@+id/splitDivider"
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:layout_marginTop="14dp"
+        android:layout_marginBottom="14dp"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="0.48"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <ImageView
+            android:id="@+id/splitUpcomingHeader"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.14"
+            android:scaleType="fitXY"
+            android:importantForAccessibility="no" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.86">
+
+            <ListView
+                android:id="@+id/splitUpcomingList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:divider="@null"
+                android:dividerHeight="0dp"
+                android:scrollbars="none" />
+
+            <TextView
+                android:id="@+id/splitUpcomingEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center|start"
+                android:text="Nothing scheduled"
+                android:textColor="@color/widget_preview_text_secondary"
+                android:textSize="12sp"
+                android:fontFamily="@font/ntype82_regular" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

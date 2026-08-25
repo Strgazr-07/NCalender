@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="window_background">#000000</color>
+
+    <color name="widget_preview_bg">#0A0A09</color>
+    <color name="widget_preview_border">#2A2A28</color>
+    <color name="widget_preview_text">#FFFFFF</color>
+    <color name="widget_preview_text_secondary">#C8C8C6</color>
+    <color name="widget_preview_text_dim">#8A8A88</color>
+    <color name="widget_preview_accent">#D71921</color>
+    <color name="widget_preview_on_accent">#000000</color>
+</resources>

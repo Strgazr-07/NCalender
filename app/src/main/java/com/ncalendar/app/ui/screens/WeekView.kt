@@ -2,6 +2,7 @@ package com.ncalendar.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ncalendar.app.data.CalendarFormats
@@ -32,6 +34,7 @@ import com.ncalendar.app.ui.theme.NColors
 import com.ncalendar.app.ui.theme.NFonts
 import com.ncalendar.app.viewmodel.CalendarViewModel
 import com.ncalendar.app.viewmodel.ViewMode
+import java.time.LocalDate
 
 private const val DAY_START = 0
 private const val DAY_END = 24
@@ -80,6 +83,13 @@ fun WeekView(vm: CalendarViewModel, events: List<EventItem>) {
                 }
             }
         }
+        // All-day events (holidays included) had no home anywhere in this screen — the hour
+        // grid below explicitly excludes them (WeekBlock only makes sense for a timed span),
+        // so they simply never appeared in Week view at all, unlike Month and Day. Skips
+        // rendering entirely when the visible week has none, so weeks without holidays don't
+        // carry an empty gap.
+        WeekAllDayRow(vm, events, weekDays)
+
         Box(Modifier.fillMaxWidth().height(1.dp).background(NColors.border))
 
         // Full 24h grid, opened scrolled to the morning so 00:00 isn't the landing point.
@@ -108,6 +118,60 @@ fun WeekView(vm: CalendarViewModel, events: List<EventItem>) {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/** All-day strip above the hour grid — one column per day, matching the day headers above it.
+ *  Capped at 2 visible chips per day with a "+N" overflow, same language as
+ *  MonthView's DaySummaryCard, since a holiday-heavy week could otherwise push the row tall
+ *  enough to crowd out the timed grid beneath it. */
+@Composable
+private fun WeekAllDayRow(vm: CalendarViewModel, events: List<EventItem>, weekDays: List<LocalDate>) {
+    val byDay = weekDays.associateWith { d -> vm.eventsOn(events, d).filter { it.allDay } }
+    if (byDay.values.all { it.isEmpty() }) return
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = ScreenPad - 8.dp, end = ScreenPad - 8.dp, top = 2.dp, bottom = 8.dp),
+    ) {
+        Box(Modifier.width(30.dp))
+        weekDays.forEach { d ->
+            val dayEvents = byDay[d].orEmpty()
+            Column(
+                Modifier.weight(1f).padding(horizontal = 1.5.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                dayEvents.take(2).forEach { e ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(16.dp)
+                            .background(e.color.copy(alpha = 0.22f), RoundedCornerShape(4.dp))
+                            .clickable { vm.openEvent(e.id) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            e.title,
+                            color = NColors.textPrimary,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 3.dp),
+                        )
+                    }
+                }
+                if (dayEvents.size > 2) {
+                    Text(
+                        "+${dayEvents.size - 2}",
+                        color = NColors.textFaint,
+                        fontFamily = NFonts.Mono,
+                        fontSize = 8.sp,
+                    )
                 }
             }
         }

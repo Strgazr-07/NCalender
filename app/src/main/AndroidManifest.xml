@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- Fetching subscribed .ics calendar feeds. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".NCalendarApp"
@@ -13,25 +16,50 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:theme="@android:style/Theme.Black.NoTitleBar"
+        android:theme="@style/Theme.NCalendar"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.Black.NoTitleBar"
+            android:theme="@style/Theme.NCalendar"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/calendar" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/calendar" />
+            </intent-filter>
         </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <receiver
             android:name=".notifications.ReminderReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.ncalendar.app.ACTION_REMIND" />
+                <action android:name="com.ncalendar.app.ACTION_SNOOZE" />
+                <action android:name="com.ncalendar.app.ACTION_DAILY_SYNC" />
+                <action android:name="com.ncalendar.app.ACTION_LIVE_START" />
+                <action android:name="com.ncalendar.app.ACTION_LIVE_END" />
+                <action android:name="com.ncalendar.app.ACTION_LIVE_DISMISS" />
             </intent-filter>
         </receiver>
 
@@ -41,6 +69,24 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".widget.DateChangeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".widget.WidgetTickReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.ncalendar.app.ACTION_WIDGET_TICK" />
             </intent-filter>
         </receiver>
 
@@ -91,5 +137,37 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_mini_month" />
         </receiver>
+
+        <receiver
+            android:name=".widget.UpcomingWidget"
+            android:exported="false"
+            android:label="NCalendar · Upcoming">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_upcoming" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.SplitWidget"
+            android:exported="false"
+            android:label="NCalendar · Split view">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_split" />
+        </receiver>
+
+        <!-- One service for every collection-backed widget; which collection it serves is
+             chosen by the adapter intent's Uri scheme. See WidgetCollectionService for why
+             this is deliberately not one service class per collection. -->
+        <service
+            android:name=".widget.WidgetCollectionService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
     </application>
 </manifest>

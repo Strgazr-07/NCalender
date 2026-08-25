@@ -5,39 +5,86 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 
 enum class RepeatRule(val label: String) {
     NONE("Never"),
     DAILY("Daily"),
     WEEKLY("Weekly"),
     WEEKDAY("Weekdays"),
-    MONTHLY("Monthly");
-
-    /** iCal RRULE for the system calendar provider, or null for non-repeating. */
-    fun toRRule(): String? = when (this) {
-        NONE -> null
-        DAILY -> "FREQ=DAILY"
-        WEEKLY -> "FREQ=WEEKLY"
-        WEEKDAY -> "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
-        MONTHLY -> "FREQ=MONTHLY"
-    }
+    MONTHLY("Monthly"),
+    YEARLY("Each year");
 
     companion object {
         fun fromStorage(s: String?): RepeatRule =
             entries.firstOrNull { it.name.equals(s, ignoreCase = true) } ?: NONE
 
-        fun fromRRule(rrule: String?): RepeatRule {
-            if (rrule.isNullOrBlank()) return NONE
-            val r = rrule.uppercase()
-            return when {
-                r.contains("FREQ=DAILY") -> DAILY
-                r.contains("FREQ=MONTHLY") -> MONTHLY
-                r.contains("FREQ=WEEKLY") && r.contains("BYDAY=MO,TU,WE,TH,FR") -> WEEKDAY
-                r.contains("FREQ=WEEKLY") -> WEEKLY
+        fun fromRRule(rrule: String?): RepeatRule = parseRRule(rrule).rule
+
+        fun parseRRule(rrule: String?): RepeatConfig {
+            if (rrule.isNullOrBlank()) return RepeatConfig()
+            val parts = rrule.split(';')
+                .mapNotNull {
+                    val idx = it.indexOf('=')
+                    if (idx <= 0) null else it.substring(0, idx).uppercase() to it.substring(idx + 1)
+                }
+                .toMap()
+            val byDays = parts["BYDAY"].orEmpty()
+                .split(',')
+                .mapNotNull { rRuleDayToIso(it.takeLast(2).uppercase()) }
+                .toSet()
+            val freq = parts["FREQ"]?.uppercase()
+            val rule = when (freq) {
+                "DAILY" -> DAILY
+                "MONTHLY" -> MONTHLY
+                "YEARLY" -> YEARLY
+                "WEEKLY" -> if (byDays == setOf(1, 2, 3, 4, 5)) WEEKDAY else WEEKLY
                 else -> WEEKLY
             }
+            val until = parts["UNTIL"]?.take(8)?.let { raw ->
+                runCatching {
+                    LocalDate.of(raw.substring(0, 4).toInt(), raw.substring(4, 6).toInt(), raw.substring(6, 8).toInt())
+                }.getOrNull()
+            }
+            return RepeatConfig(
+                rule = rule,
+                interval = parts["INTERVAL"]?.toIntOrNull()?.coerceAtLeast(1) ?: 1,
+                byDays = if (rule == WEEKDAY) emptySet() else byDays,
+                until = until,
+                count = parts["COUNT"]?.toIntOrNull()?.takeIf { it > 0 },
+            )
         }
     }
+}
+
+data class RepeatConfig(
+    val rule: RepeatRule = RepeatRule.NONE,
+    val interval: Int = 1,
+    val byDays: Set<Int> = emptySet(),
+    val until: LocalDate? = null,
+    val count: Int? = null,
+)
+
+fun isoDayToRRule(day: Int): String = when (day) {
+    1 -> "MO"
+    2 -> "TU"
+    3 -> "WE"
+    4 -> "TH"
+    5 -> "FR"
+    6 -> "SA"
+    7 -> "SU"
+    else -> "MO"
+}
+
+fun rRuleDayToIso(day: String): Int? = when (day.uppercase()) {
+    "MO" -> 1
+    "TU" -> 2
+    "WE" -> 3
+    "TH" -> 4
+    "FR" -> 5
+    "SA" -> 6
+    "SU" -> 7
+    else -> null
 }
 
 /**
@@ -52,7 +99,17 @@ data class CalendarInfo(
     val accountType: String = "",
     val isWritable: Boolean = true,
     val isPrimary: Boolean = false,
+    /** A regional public-holiday calendar (Google's "Holidays in X", or similarly named on
+     *  other providers) — see CalendarProvider.isHolidayCalendar. Lets "Show holidays" be a
+     *  single Settings toggle instead of requiring the user to find and hide the exact
+     *  holiday calendar by hand in Manage calendars. */
+    val isHoliday: Boolean = false,
 )
+
+/** Matches the exact grouping CalendarsScreen displays accounts under (accountName, falling
+ *  back to "On this device") — the account-level visibility toggle must correspond 1:1 with
+ *  the visual group the user sees, not some other derived key. */
+val CalendarInfo.accountKey: String get() = accountName.ifBlank { "On this device" }
 
 object Calendars {
     // The offline calendar set: everything stays on this phone, no accounts.
@@ -73,6 +130,17 @@ data class EventItem(
     val end: LocalDateTime,
     val allDay: Boolean = false,
     val repeat: RepeatRule = RepeatRule.NONE,
+    val repeatInterval: Int = 1,
+    val repeatByDays: Set<Int> = emptySet(),
+    val repeatEndDate: LocalDate? = null,
+    val repeatEndCount: Int? = null,
+    // Local-only ("edit/delete just this occurrence") series exceptions: dates the base series
+    // should NOT expand into an instance for, because either a standalone replacement event
+    // exists for that date or the occurrence was deleted outright. Only meaningful on the raw
+    // base entity Recurrence.expand reads; irrelevant (and unused) on an already-expanded
+    // instance. System-calendar events use CalendarContract's own exception mechanism instead —
+    // see CalendarProvider.insertExceptionEdit/insertExceptionCancel.
+    val repeatExceptionDates: Set<LocalDate> = emptySet(),
     val reminders: List<Int> = emptyList(),
     val location: String? = null,
     val notes: String? = null,
@@ -85,6 +153,21 @@ data class EventItem(
     val startDate: LocalDate get() = start.toLocalDate()
     val endDate: LocalDate get() = end.toLocalDate()
 }
+
+/** The recurring SERIES' own DTSTART/duration, as read from CalendarContract directly (not
+ *  recurrence-expanded). See CalendarProvider.queryEventBase. */
+data class EventBase(
+    val start: LocalDateTime,
+    val durationMinutes: Long,
+    val allDay: Boolean,
+    val rrule: String?,
+)
+
+/** How much of a recurring series an edit/delete/drag applies to. THIS_AND_FUTURE is
+ *  deliberately not offered: it needs UNTIL-splitting the original series and re-homing any
+ *  later exceptions, which is a lot of provider surgery for comparatively little payoff over
+ *  just these two. */
+enum class EditScope { THIS_EVENT, ALL_EVENTS }
 
 /** Date/time labels + tiny NLU used across the app — ported from the original design's Component logic. */
 object CalendarFormats {
@@ -135,6 +218,56 @@ object CalendarFormats {
     fun timeLabelFor(e: EventItem): String =
         if (e.allDay) "All-day" else "${fmtTime(e.start.toLocalTime())} – ${fmtTime(e.end.toLocalTime())}"
 
+    /**
+     * How far off [to] is, in the largest unit that still reads naturally. The load-bearing
+     * rule is that everything past today buckets by CALENDAR DAY, not by elapsed duration —
+     * bucketing on `duration / 1440` renders "tomorrow at 9am, seen from 11pm tonight" as
+     * "in 10h", and (the reported bug) leaves hours accumulating without limit until a
+     * five-week-away event reads "in 820h 44m". Only same-day events fall through to hours.
+     *
+     * [compact] trims the words for tight spaces (widget corners): "3d" rather than "in 3 days".
+     */
+    fun countdown(from: LocalDateTime, to: LocalDateTime, compact: Boolean = false): String {
+        val minutes = java.time.Duration.between(from, to).toMinutes()
+        if (minutes <= 0) return "now"
+        val days = ChronoUnit.DAYS.between(from.toLocalDate(), to.toLocalDate())
+        return when {
+            days == 0L && minutes < 60 -> if (compact) "${minutes}m" else "in $minutes min"
+            days == 0L -> {
+                val h = minutes / 60
+                val m = minutes % 60
+                // Minutes stop earning their place past a few hours out.
+                if (compact) "${h}h" else if (h >= 6 || m == 0L) "in ${h}h" else "in ${h}h ${m}m"
+            }
+            days == 1L -> if (compact) "1d" else "tomorrow"
+            days < 7L -> if (compact) "${days}d" else "in $days days"
+            days < 28L -> {
+                val weeks = days / 7
+                if (compact) "${weeks}w" else if (weeks == 1L) "in 1 week" else "in $weeks weeks"
+            }
+            to.year != from.year -> "${fmtDateShort(to.toLocalDate())}, ${to.year}"
+            else -> fmtDateShort(to.toLocalDate())
+        }
+    }
+
+    /** How much of an in-progress event is left. Same bucketing as [countdown], phrased as a
+     *  remainder rather than a wait. */
+    fun remaining(now: LocalDateTime, end: LocalDateTime, compact: Boolean = false): String {
+        val minutes = java.time.Duration.between(now, end).toMinutes()
+        if (minutes <= 0) return "ending"
+        val days = ChronoUnit.DAYS.between(now.toLocalDate(), end.toLocalDate())
+        return when {
+            days == 0L && minutes < 60 -> if (compact) "${minutes}m" else "$minutes min left"
+            days == 0L -> {
+                val h = minutes / 60
+                val m = minutes % 60
+                if (compact) "${h}h" else if (h >= 6 || m == 0L) "${h}h left" else "${h}h ${m}m left"
+            }
+            days == 1L -> if (compact) "1d" else "ends tomorrow"
+            else -> if (compact) "${days}d" else "ends ${fmtDateShort(end.toLocalDate())}"
+        }
+    }
+
     fun reminderLabel(m: Int): String = when {
         m == 0 -> "At time of event"
         m < 60 -> "$m minutes before"
@@ -146,6 +279,37 @@ object CalendarFormats {
             val d = m / 1440
             "$d day${if (d == 1) "" else "s"} before"
         }
+    }
+
+    fun repeatSummary(
+        rule: RepeatRule,
+        interval: Int,
+        byDays: Set<Int>,
+        until: LocalDate?,
+        count: Int?,
+    ): String {
+        if (rule == RepeatRule.NONE) return RepeatRule.NONE.label
+        val every = interval.coerceAtLeast(1)
+        val unit = when (rule) {
+            RepeatRule.DAILY -> "day"
+            RepeatRule.WEEKLY, RepeatRule.WEEKDAY -> "week"
+            RepeatRule.MONTHLY -> "month"
+            RepeatRule.YEARLY -> "year"
+            RepeatRule.NONE -> "day"
+        }
+        val base = if (every == 1) rule.label else "Every $every ${unit}s"
+        val days = when {
+            rule == RepeatRule.WEEKDAY -> " on weekdays"
+            rule == RepeatRule.WEEKLY && byDays.isNotEmpty() ->
+                " on " + byDays.sorted().joinToString(", ") { DOW[(it % 7)].lowercase().replaceFirstChar(Char::uppercase) }
+            else -> ""
+        }
+        val end = when {
+            until != null -> " · until ${fmtDateShort(until)}"
+            count != null -> " · $count times"
+            else -> ""
+        }
+        return "$base$days$end"
     }
 
     private val workRe = Regex(

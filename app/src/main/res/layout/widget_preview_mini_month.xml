@@ -19,7 +19,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="JULY"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/widget_preview_text"
             android:textSize="13sp"
             android:letterSpacing="0.06"
             android:fontFamily="@font/ndot55_regular" />
@@ -27,7 +27,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="2026"
-            android:textColor="#8A8A88"
+            android:textColor="@color/widget_preview_text_dim"
             android:textSize="10sp"
             android:letterSpacing="0.15"
             android:fontFamily="@font/ntype82_mono" />
@@ -69,7 +69,7 @@
                 android:gravity="center"
                 android:background="@drawable/widget_preview_today"
                 android:text="3"
-                android:textColor="#000000"
+                android:textColor="@color/widget_preview_on_accent"
                 android:textSize="11sp"
                 android:fontFamily="@font/ndot55_regular" />
         </FrameLayout>

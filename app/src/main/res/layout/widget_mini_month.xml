@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Month calendar: one bitmap (WidgetRenderer.renderMonthCalendar) with a transparent overlay of
+  per-day tap targets on top, so every date is individually clickable without the widget
+  needing a collection adapter. See widget_split.xml for why the GridView version was dropped.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/miniMonthRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_surface_dark"
+    android:padding="10dp">
+
+    <ImageView
+        android:id="@+id/miniMonthCalendar"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:importantForAccessibility="no" />
+
+    <include
+        layout="@layout/widget_month_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</FrameLayout>
